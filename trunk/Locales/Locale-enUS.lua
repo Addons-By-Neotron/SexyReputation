@@ -3,23 +3,28 @@
 local L = LibStub("AceLocale-3.0"):NewLocale("SexyReputation", "enUS", true)
 
 
-L["Change"] = true
-L["Color fields based on your standing with the different factions."] = true
+L["Active Factions Only"] = true
+L["Bar"] = true
+L["Both Standing and Reputation"] = true
+L["Color Text"] = true
+L["Color standing and reputation fields based on your standing with the different factions."] = true
 L["Faction"] = true
 L["Factions"] = true
-L["Only show factions that have had reputation changes in the past 30 days."] = true
+L["None"] = true
+L["Only show factions with recent reputation changes."] = true
 L["Reputation"] = true
+L["Reputation Only"] = true
 L["Session"] = true
 L["Sexy Reputations"] = true
-L["Show Changes Only"] = true
 L["Show Gains"] = true
 L["Show Percentage"] = true
-L["Show Reputation"] = true
-L["Show Standing"] = true
 L["Show reputation gained or lost in the session and today."] = true
-L["Show reputation values, ie 4543 / 12000."] = true
-L["Show the faction standing text, i.e Hated, Neutral etc."] = true
 L["Show your rep as a percentage of the reputation standing (i.e Neutral 1500/3000 = 50%)"] = true
 L["Standing"] = true
-L["Standing Color"] = true
+L["Standing Only"] = true
+L["Standing Style"] = true
+L["Text"] = true
+L["Text Reputation Style"] = true
 L["Today"] = true
+L["Whether to show the reputation level as a bar, text or not at all"] = true
+L["Whether to show the standing and/or reputation level text."] = true

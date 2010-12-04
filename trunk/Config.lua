@@ -13,6 +13,13 @@ function mod:GetProfileParam(var)
    local varName = var[#var]
    return mod.db.global[varName]
 end
+mod.STYLE_BAR = 1
+mod.STYLE_TEXT = 2
+mod.STYLE_NONE = 3
+mod.TEXT_STYLE_STANDING = 1
+mod.TEXT_STYLE_REPUTATION = 2
+mod.TEXT_STYLE_BOTH = 3
+
 
 mod.defaults = {
    char = {
@@ -22,12 +29,14 @@ mod.defaults = {
    global = {
       factionLookup = {},
       colorFactions = true,
-      showStanding = true,
-      showRep = true,
+      showStanding = false,
+      showRep = false,
       showPercentage = true,
       showTooltips = true,
       showOnlyChanged = false,
       showGains = true,
+      repTextStyle = mod.TEXT_STYLE_BOTH,
+      repStyle = mod.STYLE_BAR,
    }
 }
 
@@ -38,20 +47,31 @@ mod.options = {
    set = "SetProfileParam",
    get = "GetProfileParam",
    args = {
+      repTextStyle = {
+	 type = "select",
+	 values = {
+	    L["Standing Only"], L["Reputation Only"], L["Both Standing and Reputation"]
+	 },
+	 name = L["Text Reputation Style"],
+	 desc = L["Whether to show the standing and/or reputation level text."],
+	 order = 200,
+	 disabled = function() return mod.gdb.repStyle ~= mod.STYLE_TEXT end,
+      },
       colorFactions = {
 	 type = "toggle",
-	 name = L["Standing Color"],
-	 desc = L["Color fields based on your standing with the different factions."], 
+	 name = L["Color Text"],
+	 desc = L["Color standing and reputation fields based on your standing with the different factions."],
+	 order = 300, 
+	 disabled = function() return mod.gdb.repStyle ~= mod.STYLE_TEXT end,
       },
-      showStanding = {
-	 type = "toggle",
-	 name = L["Show Standing"],
-	 desc = L["Show the faction standing text, i.e Hated, Neutral etc."], 
-	    },
-      showRep = {
-	 type = "toggle",
-	 name = L["Show Reputation"],
-	 desc = L["Show reputation values, ie 4543 / 12000."], 
+      repStyle = {
+	 type = "select",
+	 values = {
+	    L["Bar"], L["Text"],  L["None"]
+	 },
+	 order = 100, 
+	 name = L["Standing Style"],
+	 desc = L["Whether to show the reputation level as a bar, text or not at all"], 
       },
       showPercentage = {
 	 type = "toggle",
@@ -65,8 +85,8 @@ mod.options = {
       },
       showOnlyChanged = {
 	 type = "toggle",
-	 name = L["Show Changes Only"],
-	 desc = L["Only show factions that have had reputation changes in the past 30 days."],
+	 name = L["Active Factions Only"],
+	 desc = L["Only show factions with recent reputation changes."],
       },
    }
 }

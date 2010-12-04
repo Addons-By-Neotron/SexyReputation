@@ -12,6 +12,8 @@ local FL
 local L        = LibStub("AceLocale-3.0"):GetLocale("SexyReputation", false)
 local LD       = LibStub("LibDropdown-1.0")
 local QTIP     = LibStub("LibQTip-1.0")
+local BAR      = LibStub("LibSimpleBar-1.0")
+local barProvider = {}
 
 local ldb = LibStub("LibDataBroker-1.1"):NewDataObject("SexyRep",
 						       {
@@ -45,16 +47,17 @@ local minReputationValues =  {
    [8] =  42000, -- Exalted
 }
 
-local standingColors = {
-   [1] = {r = 0.55, g = 0,    b = 0    }, -- hated
-   [2] = {r = 1,    g = 0,    b = 0    }, -- hostile
-   [3] = {r = 1,    g = 0.55, b = 0    }, -- unfriendly
-   [4] = {r = 0.75, g = 0.75, b = 0.75 }, -- neutral
-   [5] = {r = 0.25, g = 1,    b = 0.75 }, -- friendly
-   [6] = {r = 0,    g = 1,    b = 0    }, -- honored
-   [7] = {r = 0.25, g = 0.4,  b = 0.9  }, -- reverted
-   [8] = {r = 0.6,  g = 0.2,  b = 0.8  }, -- exalted
-}
+local standingColors = FACTION_BAR_COLORS
+--{
+--   [1] = {r = 0.55, g = 0,    b = 0    }, -- hated
+--   [2] = {r = 1,    g = 0,    b = 0    }, -- hostile
+--   [3] = {r = 1,    g = 0.55, b = 0    }, -- unfriendly
+--   [4] = {r = 0.75, g = 0.75, b = 0.75 }, -- neutral
+--   [5] = {r = 0.25, g = 1,    b = 0.75 }, -- friendly
+--   [6] = {r = 0,    g = 1,    b = 0    }, -- honored
+--   [7] = {r = 0.25, g = 0.4,  b = 0.9  }, -- reverted
+--   [8] = {r = 0.6,  g = 0.2,  b = 0.8  }, -- exalted
+--}
 
 
 -- table recycling
@@ -162,8 +165,6 @@ function mod:ScanFactions()
       if isHeader and isCollapsed then
 	 foldedHeaders[id] = true
 	 ExpandFactionHeader(id)
-      else
-	 mod.cdb.hf[mod:FactionID(name)] = nil
       end
       id = id + 1
    end
@@ -248,19 +249,24 @@ function ldb.OnEnter(frame)
 
    local numCols = 1
 
-   local showRep = mod.gdb.showRep
-   local showStanding = mod.gdb.showStanding
+   local showRep = mod.gdb.repTextStyle ~= mod.TEXT_STYLE_STANDING and mod.gdb.repStyle == mod.STYLE_TEXT
+   local showStanding = mod.gdb.repTextStyle ~= mod.TEXT_STYLE_REPUTATION and mod.gdb.repStyle == mod.STYLE_TEXT
+   local showRepBar = mod.gdb.repStyle == mod.STYLE_BAR
    local showPercentage = mod.gdb.showPercentage
    local showGains = mod.gdb.showGains
    local colorFactions = mod.gdb.colorFactions
    
-   if showRep then numCols = numCols + 3 end
-   if showStanding then numCols = numCols + 1 end
+   if showRepBar then
+      numCols = numCols + 1
+   else
+      if showRep then numCols = numCols + 3 end
+      if showStanding then numCols = numCols + 1 end
+   end
    if showPercentage then numCols = numCols + 1 end
    if showGains then numCols = numCols + 2 end
    
-   tooltip:SetColumnLayout(numCols, "LEFT")
    tooltip:Clear()
+   tooltip:SetColumnLayout(numCols, "LEFT")
    
    if frame then
       tooltip:SetAutoHideDelay(0.5, frame)
@@ -271,40 +277,45 @@ function ldb.OnEnter(frame)
    end
    
    local y, x
-   local skipUntilHeader, skipUntilChildHeader
-   local isTopLevelHeader, isChildHeader
-   local todaysDate = mod:GetDate()
-   local showOnlyChanged = mod.gdb.showOnlyChanged
 
    y = tooltip:AddHeader(c(L["Faction"], "ffff00"))
    x = 2
-   if showStanding then
-      tooltip:SetCell(y, x, c(L["Standing"], "ffff00"), "LEFT") x = x + 1
-   end
-   if showRep then
-      tooltip:SetCell(y, x, c(L["Reputation"], "ffff00"), "CENTER", 3) x = x + 3
+   if showRepBar then
+      tooltip:SetCell(y, x, c(L["Standing"], "ffff00"), "CENTER") x = x + 1
+   else
+      if showStanding then
+	 tooltip:SetCell(y, x, c(L["Standing"], "ffff00"), "LEFT") x = x + 1
+      end
+      if showRep then
+	 tooltip:SetCell(y, x, c(L["Reputation"], "ffff00"), "CENTER", 3) x = x + 3
+      end
    end
    if showPercentage then
       tooltip:SetCell(y, x, c("%", "ffff00"), "CENTER") x = x + 1
    end
    if showGains then
-      --tooltip:SetCell(y-1, x, c(L["Change"], "ffff00"), "CENTER", 2)
       tooltip:SetCell(y, x, c(L["Session"], "ffff00"), "CENTER") x = x + 1
       tooltip:SetCell(y, x, c(L["Today"], "ffff00"), "CENTER") x = x + 1
    end
    tooltip:AddSeparator(2)
 
+   local skipUntilHeader, skipUntilChildHeader
+   local isTopLevelHeader, isChildHeader
+   local todaysDate = mod:GetDate()
+   local showOnlyChanged = mod.gdb.showOnlyChanged
+   local indent, isTopLevelHeader, isChildHeader, sessionChange, today, showRow
    for id, faction in ipairs(mod.allFactions) do
-      local indent = 0
-      local isTopLevelHeader = faction.isHeader and not faction.isChild
-      local isChildHeader = faction.isHeader and faction.isChild
-
-      local sessionChange = mod.sessionFactionChanges[faction.id]
-      local today = mod.cdb.factionHistory[todaysDate] and mod.cdb.factionHistory[todaysDate][faction.id];
-
-      local showRow = true
+      indent = 0
+      isTopLevelHeader = faction.isHeader and not faction.isChild
+      isChildHeader = faction.isHeader and faction.isChild
+      
+      sessionChange = mod.sessionFactionChanges[faction.id]
+      today = mod.cdb.factionHistory[todaysDate] and mod.cdb.factionHistory[todaysDate][faction.id];
+      
+      showRow = true
       -- calculate whether this row should be displayed. Split out this way
       -- so it's possible to understand what it's filtering and why
+      
       if skipUntilHeader and not isTopLevelHeader then
 	 showRow = false
       elseif skipUntilChildHeader and not (isTopLevelHeader or isChildHeader) then
@@ -312,17 +323,16 @@ function ldb.OnEnter(frame)
       elseif showOnlyChanged and not (sessionChange or today) then
 	 showRow = false
       end
-      
       if showRow then
-	 local title
+	 local title, folded
 	 if not showOnlyChanged then
 	    if faction.isChild then indent = 20 end
 	    if not faction.isHeader then indent = indent + 20 end
-	    local folded = faction.isHeader and mod.cdb.hf[faction.id]
+	    folded = faction.isHeader and mod.cdb.hf[faction.id]
 	    local pm = _plusminus(folded)
-	    title = faction.isHeader and string.format("%s |cffffd200%s|r", pm, faction.name) or faction.name
+	    title = faction.isHeader and fmt("%s |cffffd200%s|r", pm, faction.name) or faction.name
 	 else
-	    title = faction.name
+	    title = faction.isHeader and c(faction.name, "ffd200") or faction.name
 	 end
 	 local color, rep, repTitle = mod:ReputationLevelDetails(faction.reputation, faction.standingId)
 	 local font
@@ -337,18 +347,35 @@ function ldb.OnEnter(frame)
 			      end, faction.id)
 
 	 tooltip:SetLineScript(y, "OnEnter", _showFactionInfoTooltip, faction)
+	 tooltip:SetLineScript(y, "OnLeave", nil)
 	 
 	 if not faction.isHeader or faction.hasRep then
-	    local maxValue = faction.topValue-faction.bottomValue
 	    x = 2
 	    -- "RIGHT", "CENTER", "RIGHT", "RIGHT")
 	    if showStanding then
 	       tooltip:SetCell(y, x, c(repTitle, color), "LEFT") x = x + 1
 	    end
+	    local maxValue = faction.topValue-faction.bottomValue
 	    if showRep then
 	       tooltip:SetCell(y, x, c(tostring(rep), color), "RIGHT") x = x + 1
 	       tooltip:SetCell(y, x, "/", "CENTER") x = x + 1
 	       tooltip:SetCell(y, x, c(tostring(maxValue), color), "RIGHT") x = x + 1
+	    end
+	    if showRepBar then
+	       tooltip:SetCell(y, x, repTitle, "CENTER", mod.barProvider, standingColors[faction.standingId], rep, maxValue, 120, 12)
+	       faction.x, faction.y = x, y
+	       tooltip:SetLineScript(y, "OnEnter", function(frame, faction)
+						      tooltip:SetCell(faction.y, faction.x, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, standingColors[faction.standingId], rep, maxValue, 120, 12)
+						      _showFactionInfoTooltip(frame, faction)
+						   end, faction)
+	       tooltip:SetLineScript(y, "OnLeave", function(frame, faction)
+						      -- Breaks encapsulation but.. otherwise it breaks the code
+						      local lines = tooltip.lines and tooltip.lines[faction.y]
+						      if lines and lines.cells and lines.cells[faction.x] then
+							 tooltip:SetCell(faction.y, faction.x, repTitle, "CENTER", mod.barProvider, standingColors[faction.standingId], rep, maxValue, 120, 12)
+						      end
+						   end, faction)
+	       x = x + 1
 	    end
 	    if showPercentage then
 	       tooltip:SetCell(y, x, fmt("%.0f%%", (100.0*rep / maxValue)), "RIGHT") x = x + 1
@@ -417,3 +444,48 @@ function mod:COMBAT_TEXT_UPDATE(event, type, faction, amount)
       mod.cdb.factionHistory[date] = today
    end
 end
+
+
+-- Set up a custom provider for the bars
+local barProvider, barCellPrototype = QTIP:CreateCellProvider()
+mod.barProvider = barProvider
+
+function barCellPrototype:InitializeCell()
+   self.bar = BAR:NewSimpleBar(self, 0, 0, 100, 10, BAR.LEFT_TO_RIGHT)
+   self.bar:SetAllPoints(self)
+   self.fontString = self.bar:CreateFontString()
+   self.fontString:SetAllPoints(self.bar)
+   self.fontString:SetFontObject(GameTooltipText)
+   self.fontString:SetJustifyV("CENTER")
+end
+ 
+function barCellPrototype:SetupCell(tooltip, value, justification, font, color, rep, maxRep, width, height)
+   local fs = self.fontString
+   fs:SetFontObject(font or tooltip:GetFont())
+   fs:SetJustifyH(justification)
+   fs:SetText(tostring(value))
+   fs:Show()
+   
+   self.bar:SetValue(rep, maxRep)
+   self.bar:SetBackgroundColor(0, 0, 0, 0.4)
+   self.bar:SetColor(color.r, color.g, color.b, 0.8)
+   if width then
+      self.bar:SetLength(width)
+   end
+   if height then
+      self.bar:SetThickness(height)
+   end
+   self.bar.spark:Hide()
+   self:SetWidth(width)
+   return width, height
+end
+
+function barCellPrototype:getContentHeight()
+   return self.bar:GetHeight()
+end
+
+
+function barCellPrototype:ReleaseCell()
+   self.r, self.g, self.b = 1, 1, 1
+end
+
