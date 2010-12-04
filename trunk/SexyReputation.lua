@@ -13,7 +13,6 @@ local L        = LibStub("AceLocale-3.0"):GetLocale("SexyReputation", false)
 local LD       = LibStub("LibDropdown-1.0")
 local QTIP     = LibStub("LibQTip-1.0")
 local BAR      = LibStub("LibSimpleBar-1.0")
-local barProvider = {}
 
 local ldb = LibStub("LibDataBroker-1.1"):NewDataObject("SexyRep",
 						       {
@@ -91,6 +90,9 @@ do
    end
 
    function del(t)
+      if type(t) ~= table then
+	 return nil
+      end
       for k,v in pairs(t) do
 	 t[k] = nil
       end
@@ -142,14 +144,15 @@ end
 function mod:ScanFactions()
    local foldedHeaders = new()
    mod.allFactions = deepDel(mod.allFactions) or new()
-   
+   mod.factionIdToIdx = del(mod.factionIdToIdx) or new()
+
    -- Iterate through the factions until we run out. We need to unfold
    -- any folded header, which changes the number of factions, so we just
    -- keep iterating until GetFactionInfo return nil
-   local id = 1
+   local idx = 1
    while true do
       local name, description, standingId, bottomValue, topValue, earnedValue, atWarWith,
-      canToggleAtWar, isHeader, isCollapsed, hasRep, isWatched, isChild = GetFactionInfo(id)
+      canToggleAtWar, isHeader, isCollapsed, hasRep, isWatched, isChild = GetFactionInfo(idx)
       if not name then  break end -- last one reached
       local faction = newHash("name", name,
 			      "desc", description,
@@ -161,19 +164,20 @@ function mod:ScanFactions()
 			      "hasRep", hasRep or earnedValue ~= 0,
 			      "isChild", isChild,
 			      "id", mod:FactionID(name))
-      mod.allFactions[id] = faction
+      mod.allFactions[idx] = faction
+      mod.factionIdToIdx[faction.id] = idx
       if isHeader and isCollapsed then
-	 foldedHeaders[id] = true
-	 ExpandFactionHeader(id)
+	 foldedHeaders[idx] = true
+	 ExpandFactionHeader(idx)
       end
-      id = id + 1
+      idx = idx + 1
    end
 
    
    -- Restore factions folded states
    for id = #mod.allFactions, 1, -1 do
-      if foldedHeaders[id] then
-	 CollapseFactionHeader(id)
+      if foldedHeaders[idx] then
+	 CollapseFactionHeader(idx)
       end
    end
    del(foldedHeaders)
@@ -210,14 +214,16 @@ end
 local function c(text, color)
    return fmt("|cff%s%s|r", color, text)
 end
-local function delta(number)
-   if not number or number == 0 then
+local function delta(number, zero)
+   if not number or (not zero and number == 0) then
       return ""
    end
    if number < 0 then
       return fmt("|cffff2020%d|r", number)
-   else
+   elseif number > 0 then
       return fmt("|cff00af00+%d|r", number)
+   else
+      return "cffcfcfcf0|r"
    end
 end
 
@@ -228,18 +234,56 @@ end
 local function _showFactionInfoTooltip(frame, faction)
    if mod.gdb.showTooltips then 
       local tooltip = QTIP:Acquire("SexyRepFactionTooltip")
-      if faction.desc and faction.desc ~= ''  then
-	 tooltip:SetColumnLayout(1, "LEFT")
-	 tooltip:Clear()
-	 tooltip:AddHeader(c(faction.name, "ffd200"))
+
+      local y
+      tooltip:SetColumnLayout(2, "LEFT", "RIGHT")
+      tooltip:Clear()
+      tooltip:AddHeader(c(faction.name, "ffd200"))
+      if faction.desc and faction.desc ~= '' then
 	 tooltip:SetCell((tooltip:AddLine()), 1, faction.desc, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
-	 tooltip:SetPoint("LEFT", frame, "RIGHT", 10, 0)
-	 tooltip:SetFrameLevel(frame:GetFrameLevel()+1)
-	 tooltip:Show()
-	 tooltip:SetAutoHideDelay(0.25, frame)
-      else
-	 QTIP:Release(tooltip)
       end
+      
+      -- Show recent reputtion history
+      local todayDate = mod:GetDate()
+      local yesterDate = mod:GetDate(86400)
+      local fh = mod.cdb.factionHistory
+      local sessionChange = mod.sessionFactionChanges[faction.id]
+      local todayChange = fh[todayDate] and fh[todayDate][faction.id];
+      local yesterChange = fh[yesterDate] and fh[yesterDate][faction.id];
+      local weekChange = (todayChange or 0) + (yesterChange or 0)
+      for day = 2,7 do
+	 local dayChange = fh[mod:GetDate(day*86400)] -- going back in time
+	 if dayChange then
+	    weekChange = weekChange + dayChange
+	 end
+      end
+	 local monthChange = weekChange
+      for day = 8, 30 do
+	 local dayChange = fh[mod:GetDate(day*86400)] -- going back in time
+	 if dayChange then
+	    monthChange = monthChange + dayChange
+	 end
+      end
+      
+      tooltip:AddLine(" ")
+      y = tooltip:AddHeader()
+      tooltip:SetCell(y, 1, c(L["Recent reputation changes"], "ffd200"), "CENTER", 2)
+      tooltip:AddSeparator(1)
+      if sessionChange or todayChange or yesterChange or monthChange > 0 or weekChange > 0 then
+	 tooltip:AddLine(L["Session"], delta(sessionChange, true))
+	 tooltip:AddLine(L["Today"], delta(todayChange, true))
+	 tooltip:AddLine(L["Yesterday"], delta(yesterChange, true))
+	 tooltip:AddLine(L["Last Week"], delta(monthChange, true))
+	 tooltip:AddLine(L["Last Month"], delta(weekChange, true))
+      else
+	 y = tooltip:AddLine()
+	 tooltip:SetCell(y, 1, L["No changes recorded in the last 30 days."], "CENTER", 2)
+      end
+      tooltip:SetPoint("LEFT", frame, "RIGHT", 10, 0)
+      tooltip:SetFrameLevel(frame:GetFrameLevel()+1)
+      tooltip:Show()
+      tooltip:SetClampedToScreen(true)
+      tooltip:SetAutoHideDelay(0.25, frame)
    end
 end
 
@@ -442,6 +486,19 @@ function mod:COMBAT_TEXT_UPDATE(event, type, faction, amount)
       local today =  mod.cdb.factionHistory[date] or new()
       today[id] = (today[id] or 0) + amount
       mod.cdb.factionHistory[date] = today
+      local needsScan = true
+      if mod.allFactions then
+	 local idx = mod.factionIdToIdx[id]
+	 if mod.allFactions[idx] then
+	    -- existing faction
+	    mod.allFactions[idx].reputation = (mod.allFactions[idx].reputation or 0) + amount
+	    needsScan = true
+	 end
+      end
+      if needsScan then
+	 -- A new faction, or we haven't yet scanned factions this session
+	 mod:ScanFactions()
+      end
    end
 end
 
