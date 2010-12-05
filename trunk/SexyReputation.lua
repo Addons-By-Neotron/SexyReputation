@@ -118,6 +118,7 @@ function mod:OnInitialize()
    FL = mod.gdb.factionLookup
 
    mod.sessionFactionChanges = new()
+   mod.factionGainsCache = new()
 end
 
 function mod:OnEnable()
@@ -132,6 +133,7 @@ end
 -- This means the data storage will be smaller. The faction
 -- ID is unique to a computer and cannot be shared with others.
 function mod:FactionID(name)
+   if type(name) == "number" then return name end
    local id = FL[name]
    if not id then
       id = (mod.gdb.numFactions or 0) + 1
@@ -145,6 +147,8 @@ function mod:ScanFactions()
    local foldedHeaders = new()
    mod.allFactions = deepDel(mod.allFactions) or new()
    mod.factionIdToIdx = del(mod.factionIdToIdx) or new()
+   mod.factionGainsCache = deepDel(mod.factionGainsCache) or new()
+
 
    -- Iterate through the factions until we run out. We need to unfold
    -- any folded header, which changes the number of factions, so we just
@@ -185,7 +189,7 @@ end
 
 function mod:GetDate(delta)
    local dt = date("*t", time()-(delta or 0))
-   return fmt("%04d%02d%02d", dt.year, dt.month, dt.day)
+   return dt.year * 10000 + dt.month * 100 + dt.day
 end
 
 function mod:ReputationLevelDetails(reputation, standingId)
@@ -201,6 +205,49 @@ function mod:ReputationLevelDetails(reputation, standingId)
    return color, rep, title
 end
 
+function mod:GetGainsSummary(id)
+   local today = mod:GetDate()
+   local newlyCalculated = false
+   local fc = mod.factionGainsCache[today]
+   if not fc then
+      -- Either we changed day, in which case we need to recalculate
+      -- or it's new and it doesn't matter
+      mod.factionGainsCache = deepDel(mod.factionGainsCache) or new()
+      mod.factionGainsCache[today] = new()
+      fc = mod.factionGainsCache[today]
+   end
+
+   if not fc[id] then
+      newlyCalculated = true
+      local todayDate = mod:GetDate()
+      local yesterDate = mod:GetDate(86400)
+      local fh = mod.cdb.factionHistory
+      local todayChange = fh[todayDate] and fh[todayDate][id];
+      local yesterChange = fh[yesterDate] and fh[yesterDate][id];
+      local weekChange = (todayChange or 0) + (yesterChange or 0)
+      for day = 2,6 do
+	 local dayChange = fh[mod:GetDate(day*86400)] -- going back in time
+	 if dayChange then
+	    weekChange = weekChange + dayChange
+	 end
+      end
+      local monthChange = weekChange
+      for day = 7, 29 do
+	 local dayChange = fh[mod:GetDate(day*86400)] -- going back in time
+	 if dayChange then
+	    monthChange = monthChange + dayChange
+	 end
+      end
+      fc[id] = newHash("today", todayChange or 0,
+		       "yesterday", yesterChange or 0,
+		       "week", weekChange,
+		       "month", monthChange)
+   end
+   return fc[id], newlyCalculated
+end
+
+---------------------------------------------------
+-- LDB Display and display utility methods
 
 local function _addIndentedCell(tooltip, text, indentation, font, func, arg)
    local y, x = tooltip:AddLine()
@@ -223,7 +270,7 @@ local function delta(number, zero)
    elseif number > 0 then
       return fmt("|cff00af00+%d|r", number)
    else
-      return "cffcfcfcf0|r"
+      return "|cffcfcfcf0|r"
    end
 end
 
@@ -234,56 +281,44 @@ end
 local function _showFactionInfoTooltip(frame, faction)
    if mod.gdb.showTooltips then 
       local tooltip = QTIP:Acquire("SexyRepFactionTooltip")
-
-      local y
-      tooltip:SetColumnLayout(2, "LEFT", "RIGHT")
-      tooltip:Clear()
-      tooltip:AddHeader(c(faction.name, "ffd200"))
-      if faction.desc and faction.desc ~= '' then
-	 tooltip:SetCell((tooltip:AddLine()), 1, faction.desc, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
-      end
-      
-      -- Show recent reputtion history
-      local todayDate = mod:GetDate()
-      local yesterDate = mod:GetDate(86400)
-      local fh = mod.cdb.factionHistory
-      local sessionChange = mod.sessionFactionChanges[faction.id]
-      local todayChange = fh[todayDate] and fh[todayDate][faction.id];
-      local yesterChange = fh[yesterDate] and fh[yesterDate][faction.id];
-      local weekChange = (todayChange or 0) + (yesterChange or 0)
-      for day = 2,7 do
-	 local dayChange = fh[mod:GetDate(day*86400)] -- going back in time
-	 if dayChange then
-	    weekChange = weekChange + dayChange
+      if faction.hasRep or (faction.desc and faction.desc ~= '') then
+	 local y
+	 tooltip:SetColumnLayout(faction.hasRep and 2 or 1, "LEFT", "RIGHT")
+	 tooltip:Clear()
+	 tooltip:AddHeader(c(faction.name, "ffd200"))
+	 if faction.desc and faction.desc ~= '' then
+	    tooltip:SetCell((tooltip:AddLine()), 1, faction.desc, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
+	    tooltip:AddLine(" ")
 	 end
-      end
-	 local monthChange = weekChange
-      for day = 8, 30 do
-	 local dayChange = fh[mod:GetDate(day*86400)] -- going back in time
-	 if dayChange then
-	    monthChange = monthChange + dayChange
+	 if faction.hasRep then
+	    -- Show recent reputtion history
+	    local sessionChange = mod.sessionFactionChanges[faction.id] or 0
+	    local gs = mod:GetGainsSummary(faction.id)
+	    y = tooltip:AddHeader()
+	    if sessionChange ~= 0 or gs.today ~= 0 or gs.yesterday ~= 0 or gs.month ~= 0 or gs.week ~= 0 then
+	       tooltip:SetCell(y, 1, c(L["Recent reputation changes"], "ffd200"), "CENTER", 2)
+	       tooltip:AddSeparator(1)
+	       tooltip:AddLine(L["Session"], delta(sessionChange, true))
+	       tooltip:AddLine(L["Today"], delta(gs.today, true))
+	       tooltip:AddLine(L["Yesterday"], delta(gs.yesterday, true))
+	       tooltip:AddLine(L["Last Week"], delta(gs.week, true))
+	       tooltip:AddLine(L["Last Month"], delta(gs.month, true))
+	    else
+	       tooltip:SetColumnLayout(1, "LEFT")
+	       tooltip:SetCell(y, 1, c(L["Recent reputation changes"], "ffd200"))
+	       tooltip:AddSeparator(1)
+	       y = tooltip:AddLine(L["No changes recorded in the last 30 days."])
+	    end
 	 end
-      end
-      
-      tooltip:AddLine(" ")
-      y = tooltip:AddHeader()
-      tooltip:SetCell(y, 1, c(L["Recent reputation changes"], "ffd200"), "CENTER", 2)
-      tooltip:AddSeparator(1)
-      if sessionChange or todayChange or yesterChange or monthChange > 0 or weekChange > 0 then
-	 tooltip:AddLine(L["Session"], delta(sessionChange, true))
-	 tooltip:AddLine(L["Today"], delta(todayChange, true))
-	 tooltip:AddLine(L["Yesterday"], delta(yesterChange, true))
-	 tooltip:AddLine(L["Last Week"], delta(monthChange, true))
-	 tooltip:AddLine(L["Last Month"], delta(weekChange, true))
+	 
+	 tooltip:SetPoint("TOPLEFT", frame, "TOPRIGHT", 10, 0)
+	 tooltip:SetFrameLevel(frame:GetFrameLevel()+1)
+	 tooltip:SetClampedToScreen(true)
+	 tooltip:Show()
+	 tooltip:SetAutoHideDelay(0.25, frame)
       else
-	 y = tooltip:AddLine()
-	 tooltip:SetCell(y, 1, L["No changes recorded in the last 30 days."], "CENTER", 2)
+	 QTIP:Release(tooltip)
       end
-      tooltip:SetPoint("LEFT", frame, "RIGHT", 10, 0)
-      tooltip:SetFrameLevel(frame:GetFrameLevel()+1)
-      tooltip:Show()
-      tooltip:SetClampedToScreen(true)
-      tooltip:SetAutoHideDelay(0.25, frame)
    end
 end
 
@@ -492,12 +527,22 @@ function mod:COMBAT_TEXT_UPDATE(event, type, faction, amount)
 	 if mod.allFactions[idx] then
 	    -- existing faction
 	    mod.allFactions[idx].reputation = (mod.allFactions[idx].reputation or 0) + amount
-	    needsScan = true
+	    needsScan = false
 	 end
       end
       if needsScan then
 	 -- A new faction, or we haven't yet scanned factions this session
 	 mod:ScanFactions()
+      end
+
+      -- Update the summary data for today, week and month, but
+      -- only if we didn't calculate it just now (since it's
+      -- already up to date then
+      local gs,upToDate = mod:GetGainsSummary(id)
+      if not upToDate then
+	 gs.today = gs.today + amount
+	 gs.week  = gs.week + amount
+	 gs.month = gs.month + amount
       end
    end
 end
