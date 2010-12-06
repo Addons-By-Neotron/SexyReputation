@@ -540,10 +540,12 @@ function mod:COMBAT_TEXT_UPDATE(event, type, faction, amount)
       local needsScan = true
       if mod.allFactions then
 	 local idx = mod.factionIdToIdx[id]
-	 if mod.allFactions[idx] then
+	 local faction = mod.allFactions[idx]
+	 if faction then
 	    -- existing faction
-	    mod.allFactions[idx].reputation = (mod.allFactions[idx].reputation or 0) + amount
-	    needsScan = false
+	    faction.reputation = (faction.reputation or 0) + amount
+	    -- If we change standing level, just rescan it all	    
+	    needsScan = faction.reputation > faction.topValue or faction.reputation < faction.bottomValue
 	 end
       end
       if needsScan then
