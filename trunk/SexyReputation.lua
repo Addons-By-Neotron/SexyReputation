@@ -9,6 +9,8 @@ local floor = math.floor
 local IsAltKeyDown = IsAltKeyDown
 local IsControlKeyDown = IsControlKeyDown
 local IsShiftKeyDown = IsShiftKeyDown
+local tconcat = table.concat
+
 local FL
 
 local L        = LibStub("AceLocale-3.0"):GetLocale("SexyReputation", false)
@@ -16,10 +18,10 @@ local LD       = LibStub("LibDropdown-1.0")
 local QTIP     = LibStub("LibQTip-1.0")
 local BAR      = LibStub("LibSimpleBar-1.0")
 
-local ldb = LibStub("LibDataBroker-1.1"):NewDataObject("SexyRep",
+local ldb = LibStub("LibDataBroker-1.1"):NewDataObject(L["Sexy Reputation"],
 						       {
 							  type =  "data source", 
-							  label = L["Sexy Reputations"],
+							  label = L["Sexy Reputation"],
 							  text = L["Factions"],
 							  icon = (UnitFactionGroup("player") == "Horde" and
 							       [[Interface\Addons\SexyReputation\hordeicon]] or
@@ -120,6 +122,7 @@ end
 
 function mod:OnEnable()
    mod:RegisterEvent("COMBAT_TEXT_UPDATE");
+   mod:UpdateLDBText()
 end
 
 function mod:OnDisable()
@@ -312,7 +315,7 @@ local function _showFactionInfoTooltip(frame, faction)
 	 if mod.cdb.watchedFaction == faction.id then
 	    tooltip:AddLine(" ")
 	    tooltip:AddSeparator(1)
-	    tooltip:AddLine(c(L["This faction is currently being monitored."], "ffff00"))
+	    tooltip:AddLine(c(L["This faction is currently being tracked."], "ffff00"))
 	 end
 	 tooltip:SetPoint("TOPLEFT", frame, "TOPRIGHT", 10, 0)
 	 tooltip:SetFrameLevel(frame:GetFrameLevel()+1)
@@ -329,7 +332,12 @@ local function _factionOnClick(frame, faction, button)
    if button == "LeftButton" then
       if IsAltKeyDown() then
 	 if faction.hasRep then
-	    mod.cdb.watchedFaction = faction.id
+	    if mod.cdb.watchedFaction == faction.id then
+	       mod.cdb.watchedFaction = nil
+	    else
+	       mod.cdb.watchedFaction = faction.id
+	    end
+	    mod:UpdateLDBText()
 	 end
       elseif IsControlKeyDown() then
       elseif IsShiftKeyDown() then
@@ -394,7 +402,7 @@ function ldb.OnEnter(frame)
       tooltip:SetCell(y, x, c(L["Session"], "ffff00"), "CENTER") x = x + 1
       tooltip:SetCell(y, x, c(L["Today"], "ffff00"), "CENTER") x = x + 1
    end
-   tooltip:AddSeparator(2)
+   tooltip:AddSeparator(1)
 
    local skipUntilHeader, skipUntilChildHeader
    local isTopLevelHeader, isChildHeader
@@ -497,6 +505,16 @@ function ldb.OnEnter(frame)
 	 end
       end
    end
+
+   tooltip:AddLine(" ")
+   tooltip:AddSeparator(1)
+   y = tooltip:AddLine()
+   tooltip:SetCell(y, 1, c(L["Using the faction tooltip:"], "ffff00"), "LEFT", numCols)
+   y = tooltip:AddLine("")
+   tooltip:SetCell(y, 2, c(L["Click:"], "eda55f") .. " "..c(L["Fold / unfold faction headers."], "ffd200"), "LEFT", numCols-1)
+   y = tooltip:AddLine("")
+   tooltip:SetCell(y, 2, c(L["Alt-Click:"], "eda55f").. " "..c(L["Toggle faction tracking state on and off."], "ffd200"), "LEFT", numCols-1)
+   
    if frame then
       tooltip:SmartAnchorTo(frame)
    end
@@ -524,6 +542,45 @@ function ldb.OnLeave(frame)
 --      QTIP:Release(ldb.tooltip)
 --      ldb.tooltip = nil
 --   end
+end
+
+function mod:UpdateLDBText()
+   local text = ""
+   local gdb = mod.gdb
+   if not mod.cdb.watchedFaction then
+      ldb.text = L["Factions"]
+      return
+   end
+      
+   if not mod.allFactions then
+      mod:ScanFactions()
+   end
+   local idx = mod.factionIdToIdx[mod.cdb.watchedFaction]
+   local faction =  mod.allFactions[idx]
+   if not faction then
+      ldb.text = L["Factions"]
+      return
+   end
+   
+   local fields = new()
+   if gdb.trackName then      
+      fields[1] = faction.name
+   end
+   local color, rep, repTitle = mod:ReputationLevelDetails(faction.reputation, faction.standingId)
+   if gdb.trackStanding then
+      fields[#fields+1] = c(repTitle, color)
+   end
+   local maxValue = faction.topValue - faction.bottomValue
+   if gdb.trackRep then
+      fields[#fields+1] = fmt("%d/%d", rep, maxValue)
+   end
+   if gdb.trackPercentage then
+      fields[#fields+1] = fmt("|cffffd200%.1f%%|r", 100.0 * rep / maxValue)
+   end
+   if gdb.trackGains and mod.sessionFactionChanges[faction.id] then
+      fields[#fields+1] = delta(mod.sessionFactionChanges[faction.id], true)
+   end
+   ldb.text = tconcat(fields, " - ")
 end
 
 -----------------------
@@ -562,6 +619,9 @@ function mod:COMBAT_TEXT_UPDATE(event, type, faction, amount)
 	 gs.today = gs.today + amount
 	 gs.week  = gs.week + amount
 	 gs.month = gs.month + amount
+      end
+      if faction.id == mod.gdb.watchedFaction then
+	 mod:UpdateLDBText()
       end
    end
 end

@@ -7,6 +7,7 @@ local DBOpt = LibStub("AceDBOptions-3.0")
 function mod:SetProfileParam(var, value)
    local varName = var[#var]
    mod.gdb[varName] = value
+   mod:UpdateLDBText()
 end
 
 function mod:GetProfileParam(var) 
@@ -26,6 +27,7 @@ function mod:SetColorOpt(arg, r, g, b)
    color.r = r
    color.g = g
    color.b = b
+   mod:UpdateLDBText()
 end
 
 function mod:GetColorOpt(arg)
@@ -57,6 +59,11 @@ mod.defaults = {
       showGains = true,
       repTextStyle = mod.TEXT_STYLE_BOTH,
       repStyle = mod.STYLE_BAR,
+      trackName = true,
+      trackStanding = true,
+      trackRep = true,
+      trackPercentage = true,
+      trackGains = true,
    }
 }
 
@@ -67,47 +74,87 @@ mod.options = {
    set = "SetProfileParam",
    get = "GetProfileParam",
    args = {
-      repTextStyle = {
-	 type = "select",
-	 values = {
-	    L["Standing Only"], L["Reputation Only"], L["Both Standing and Reputation"]
+      tooltip = {
+	 type = "group",
+	 name = L["Tooltip Options"],
+	 desc = L["Configure the look and feel of the faction tooltip."],
+	 args = {
+	    repTextStyle = {
+	       type = "select",
+	       values = {
+		  L["Standing Only"], L["Reputation Only"], L["Both Standing and Reputation"]
+	       },
+	       name = L["Text Reputation Style"],
+	       desc = L["Whether to show the standing and/or reputation level text."],
+	       order = 200,
+	       disabled = function() return mod.gdb.repStyle ~= mod.STYLE_TEXT end,
+	    },
+	    colorFactions = {
+	       type = "toggle",
+	       name = L["Color Text"],
+	       desc = L["Color standing and reputation fields based on your standing with the different factions."],
+	       order = 300, 
+	       disabled = function() return mod.gdb.repStyle ~= mod.STYLE_TEXT end,
+	    },
+	    repStyle = {
+	       type = "select",
+	       values = {
+		  L["Bar"], L["Text"],  L["None"]
+	       },
+	       order = 100, 
+	       name = L["Standing Style"],
+	       desc = L["Whether to show the reputation level as a bar, text or not at all"], 
+	    },
+	    showPercentage = {
+	       type = "toggle",
+	       name = L["Show Percentage"],
+	       desc = L["Show your rep as a percentage of the reputation standing (i.e Neutral 1500/3000 = 50%)"], 
+	    },
+	    showGains = {
+	       type = "toggle",
+	       name = L["Show Gains"],
+	       desc = L["Show reputation gained or lost in the session and today."],
+	    },
+	    showOnlyChanged = {
+	       type = "toggle",
+	       name = L["Active Factions Only"],
+	       desc = L["Only show factions with recent reputation changes."],
+	    },
 	 },
-	 name = L["Text Reputation Style"],
-	 desc = L["Whether to show the standing and/or reputation level text."],
-	 order = 200,
-	 disabled = function() return mod.gdb.repStyle ~= mod.STYLE_TEXT end,
       },
-      colorFactions = {
-	 type = "toggle",
-	 name = L["Color Text"],
-	 desc = L["Color standing and reputation fields based on your standing with the different factions."],
-	 order = 300, 
-	 disabled = function() return mod.gdb.repStyle ~= mod.STYLE_TEXT end,
+      trackedFaction = {
+	 type = "group",
+	 name = L["Text Display"],
+	 desc = L["Configure the LDB display of the tracked faction."], 
+	 args = {
+	    trackName = {
+	       type = "toggle",
+	       name = L["Show Name"],
+	       desc = L["Show the name of the tracked faction."], 
+	    },
+	    trackStanding = {
+	       type = "toggle",
+	       name = L["Standing"],
+	       desc = L["Show the standing of the tracked faction."], 
+	    },
+	    trackRep = {
+	       type = "toggle",
+	       name = L["Reputation"],
+	       desc = L["Show the reputation numbers for the tracked faction."], 
+	    },
+	    trackPercentage = {
+	       type = "toggle",
+	       name = L["Percentage"],
+	       desc = L["Show the reputation percentage in the current standing level for the tracked faction."], 
+	    },
+	    trackGains = {
+	       type = "toggle",
+	       name = L["Changes"],
+	       desc = L["Show the session changes for the tracked faction."], 
+	    },
+	 }
       },
-      repStyle = {
-	 type = "select",
-	 values = {
-	    L["Bar"], L["Text"],  L["None"]
-	 },
-	 order = 100, 
-	 name = L["Standing Style"],
-	 desc = L["Whether to show the reputation level as a bar, text or not at all"], 
-      },
-      showPercentage = {
-	 type = "toggle",
-	 name = L["Show Percentage"],
-	 desc = L["Show your rep as a percentage of the reputation standing (i.e Neutral 1500/3000 = 50%)"], 
-      },
-      showGains = {
-	 type = "toggle",
-	 name = L["Show Gains"],
-	 desc = L["Show reputation gained or lost in the session and today."],
-      },
-      showOnlyChanged = {
-	 type = "toggle",
-	 name = L["Active Factions Only"],
-	 desc = L["Only show factions with recent reputation changes."],
-      },
+      
       factionColors = {
 	 type = "group",
 	 name = L["Standing Colors"],
