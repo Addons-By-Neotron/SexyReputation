@@ -123,6 +123,7 @@ end
 function mod:OnEnable()
    mod:RegisterEvent("COMBAT_TEXT_UPDATE");
    mod:UpdateLDBText()
+   mod:ScheduleTimer("ScanFactions", 5)
 end
 
 function mod:OnDisable()
@@ -143,7 +144,7 @@ function mod:FactionID(name)
    return id
 end
 
-function mod:ScanFactions()
+function mod:ScanFactions(fromTooltip)
    local foldedHeaders = new()
    mod.allFactions = deepDel(mod.allFactions) or new()
    mod.factionIdToIdx = del(mod.factionIdToIdx) or new()
@@ -185,6 +186,8 @@ function mod:ScanFactions()
       end
    end
    del(foldedHeaders)
+   tooltip = QTIP:Acquire("SexyRepTooltip")
+   QTIP:Release(tooltip)
 end
 
 function mod:GetDate(delta)
@@ -466,16 +469,17 @@ function ldb.OnEnter(frame)
 	    end
 	    if showRepBar then
 	       tooltip:SetCell(y, x, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
-	       faction.x, faction.y = x, y
+	       local xx, yy = x, y
+	       
 	       tooltip:SetLineScript(y, "OnEnter", function(frame, faction)
-						      tooltip:SetCell(faction.y, faction.x, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
+						      tooltip:SetCell(yy, xx, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
 						      _showFactionInfoTooltip(frame, faction)
 						   end, faction)
 	       tooltip:SetLineScript(y, "OnLeave", function(frame, faction)
 						      -- Breaks encapsulation but.. otherwise it breaks the code
-						      local lines = tooltip.lines and tooltip.lines[faction.y]
-						      if lines and lines.cells and lines.cells[faction.x] then
-							 tooltip:SetCell(faction.y, faction.x, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
+						      local lines = tooltip.lines and tooltip.lines[yy]
+						      if lines and lines.cells and lines.cells[xx] then
+							 tooltip:SetCell(yy, xx, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
 						      end
 						   end, faction)
 	       x = x + 1
@@ -538,10 +542,10 @@ function ldb.OnClick(frame, button)
 end
 
 function ldb.OnLeave(frame)
---   if ldb.tooltip then
---      QTIP:Release(ldb.tooltip)
---      ldb.tooltip = nil
---   end
+   --   if ldb.tooltip then
+   --      QTIP:Release(ldb.tooltip)
+   --      ldb.tooltip = nil
+   --   end
 end
 
 function mod:UpdateLDBText()
@@ -551,7 +555,7 @@ function mod:UpdateLDBText()
       ldb.text = L["Factions"]
       return
    end
-      
+   
    if not mod.allFactions then
       mod:ScanFactions()
    end
@@ -585,44 +589,55 @@ end
 
 -----------------------
 --- EVENT HANDLING
+do
+   local factionScanTimer
+   
+   function mod:COMBAT_TEXT_UPDATE(event, type, faction, amount)
+      if type == "FACTION" then
+	 if factionScanTimer then
+	    mod:CancelTimer(factionScanTimer, true)
+	 end
+	 factionScanTimer = mod:ScheduleTimer("ScanForFactionChanges", 1)
+      end
+   end
 
-function mod:COMBAT_TEXT_UPDATE(event, type, faction, amount)
-   if type == "FACTION" then
+   function mod:ScanForFactionChanges()
+      local previousFactionData = mod.allFactions
+      factionScanTimer = nil
+      mod.allFactions = nil
+      mod:ScanFactions()
+      
+      if not previousFactionData then return end -- can't do anything, had no data before
+      
       local date = mod:GetDate()
-      local id = mod:FactionID(faction)
-      mod.sessionFactionChanges[id] = (mod.sessionFactionChanges[id] or 0) + amount
+
       local today =  mod.cdb.factionHistory[date] or new()
-      today[id] = (today[id] or 0) + amount
       mod.cdb.factionHistory[date] = today
-      local needsScan = true
-      if mod.allFactions then
-	 local idx = mod.factionIdToIdx[id]
-	 local faction = mod.allFactions[idx]
-	 if faction then
-	    -- existing faction
-	    faction.reputation = (faction.reputation or 0) + amount
-	    -- If we change standing level, just rescan it all	    
-	    needsScan = faction.reputation > faction.topValue or faction.reputation < faction.bottomValue
+
+      for _,faction in ipairs(previousFactionData) do
+	 local idx = mod.factionIdToIdx[faction.id] -- required since faction orders might have changed
+	 if idx then
+	    local newFaction = mod.allFactions[idx]
+	    if newFaction.reputation ~= faction.reputation then
+	       -- Rep change occurred
+	       local amount = newFaction.reputation - faction.reputation
+	       mod.sessionFactionChanges[faction.id] = (mod.sessionFactionChanges[faction.id] or 0) + amount
+	       today[faction.id] = (today[faction.id] or 0) + amount
+
+	       local gs,upToDate = mod:GetGainsSummary(faction.id)
+	       if not upToDate then
+		  gs.changed = true
+		  gs.today = gs.today + amount
+		  gs.week  = gs.week + amount
+		  gs.month = gs.month + amount
+	       end
+	       if faction.id == mod.cdb.watchedFaction then
+		  mod:UpdateLDBText()
+	       end
+	    end
 	 end
       end
-      if needsScan then
-	 -- A new faction, or we haven't yet scanned factions this session
-	 mod:ScanFactions()
-      end
-
-      -- Update the summary data for today, week and month, but
-      -- only if we didn't calculate it just now (since it's
-      -- already up to date then
-      local gs,upToDate = mod:GetGainsSummary(id)
-      if not upToDate then
-	 gs.changed = true
-	 gs.today = gs.today + amount
-	 gs.week  = gs.week + amount
-	 gs.month = gs.month + amount
-      end
-      if faction.id == mod.gdb.watchedFaction then
-	 mod:UpdateLDBText()
-      end
+      deepDel(previousFactionData)
    end
 end
 
@@ -639,7 +654,7 @@ function barCellPrototype:InitializeCell()
    self.fontString:SetFontObject(GameTooltipText)
    self.fontString:SetJustifyV("CENTER")
 end
- 
+
 function barCellPrototype:SetupCell(tooltip, value, justification, font, color, rep, maxRep, width, height)
    local fs = self.fontString
    fs:SetFontObject(font or tooltip:GetFont())
@@ -664,7 +679,6 @@ end
 function barCellPrototype:getContentHeight()
    return self.bar:GetHeight()
 end
-
 
 function barCellPrototype:ReleaseCell()
    self.r, self.g, self.b = 1, 1, 1
