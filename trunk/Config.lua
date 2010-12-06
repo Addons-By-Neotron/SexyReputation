@@ -6,13 +6,33 @@ local DBOpt = LibStub("AceDBOptions-3.0")
 
 function mod:SetProfileParam(var, value)
    local varName = var[#var]
-   mod.db.global[varName] = value
+   mod.gdb[varName] = value
 end
 
 function mod:GetProfileParam(var) 
    local varName = var[#var]
-   return mod.db.global[varName]
+   return mod.gdb[varName]
 end
+
+function mod:SetDefaultColors()
+   -- Populate default colors
+   if not mod.gdb.colors then
+      mod.gdb.colors = FACTION_BAR_COLORS
+   end
+end
+
+function mod:SetColorOpt(arg, r, g, b)
+   color = mod.gdb.colors[mod.colorIds[arg[#arg]]]
+   color.r = r
+   color.g = g
+   color.b = b
+end
+
+function mod:GetColorOpt(arg)
+   local color = mod.gdb.colors[mod.colorIds[arg[#arg]]]
+   return color.r, color.g, color.b, 1
+end
+
 mod.STYLE_BAR = 1
 mod.STYLE_TEXT = 2
 mod.STYLE_NONE = 3
@@ -87,6 +107,64 @@ mod.options = {
 	 type = "toggle",
 	 name = L["Active Factions Only"],
 	 desc = L["Only show factions with recent reputation changes."],
+      },
+      factionColors = {
+	 type = "group",
+	 name = L["Standing Colors"],
+	 desc = L["The colors used for the bar/text for the reputation standings."],
+	 order = 9,
+	 set = "SetColorOpt",
+	 get = "GetColorOpt",
+	 args = {
+	    hated = {
+	       type = "color",	
+	       name = mod.repTitles[1],
+	       hasAlpha = false,
+	       order = 1,
+	    },
+	    hostile = {
+	       type = "color",
+	       name = mod.repTitles[2],
+	       hasAlpha = false,
+	       order = 2,
+	    },
+	    unfriendly = {
+	       type = "color",
+	       name = mod.repTitles[3],
+	       hasAlpha = false,
+	       order = 3,
+	    },
+	    neutral = {
+	       type = "color",
+	       name = mod.repTitles[4],
+	       hasAlpha = false,
+	       order = 4,
+	    },
+	    friendly = {
+	       type = "color",
+	       name = mod.repTitles[5],
+	       hasAlpha = false,
+	       order = 5,
+	    },
+	    honored = {
+	       type = "color",
+	       name = mod.repTitles[6],
+	       hasAlpha = false,
+	       order = 6,
+	    },
+	    revered = {
+	       type = "color",
+	       name = mod.repTitles[7],
+	       hasAlpha = false,
+	       order = 7,
+	    },
+	    exalted = {
+	       type = "color",
+	       name = mod.repTitles[8],
+	       hasAlpha = false,
+	       order = 8,
+	    },
+	 },
       },
    }
 }

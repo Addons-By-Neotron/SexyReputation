@@ -6,7 +6,9 @@ local GetNumFactions = GetNumFactions
 local GetFactionInfo = GetFactionInfo
 local fmt = string.format
 local floor = math.floor
-
+local IsAltKeyDown = IsAltKeyDown
+local IsControlKeyDown = IsControlKeyDown
+local IsShiftKeyDown = IsShiftKeyDown
 local FL
 
 local L        = LibStub("AceLocale-3.0"):GetLocale("SexyReputation", false)
@@ -25,7 +27,7 @@ local ldb = LibStub("LibDataBroker-1.1"):NewDataObject("SexyRep",
 						       })
 
 
-local repTitles = {
+mod.repTitles = {
    FACTION_STANDING_LABEL1, -- Hated
    FACTION_STANDING_LABEL2, -- Hostile
    FACTION_STANDING_LABEL3, -- Unfriendly
@@ -35,6 +37,12 @@ local repTitles = {
    FACTION_STANDING_LABEL7, -- Revered
    FACTION_STANDING_LABEL8, -- Exalted
 }
+
+-- names, used for looking up colors
+mod.colorIds = {
+   hated = 1, hostile = 2, unfriendly = 3, neutral = 4, friendly = 5, honored = 6, revered = 7, exalted = 8
+}
+
 local minReputationValues =  {
    [1] = -42000, -- Hated
    [2] =  -6000, -- Hostile
@@ -45,18 +53,6 @@ local minReputationValues =  {
    [7] =  21000, -- Revered
    [8] =  42000, -- Exalted
 }
-
-local standingColors = FACTION_BAR_COLORS
---{
---   [1] = {r = 0.55, g = 0,    b = 0    }, -- hated
---   [2] = {r = 1,    g = 0,    b = 0    }, -- hostile
---   [3] = {r = 1,    g = 0.55, b = 0    }, -- unfriendly
---   [4] = {r = 0.75, g = 0.75, b = 0.75 }, -- neutral
---   [5] = {r = 0.25, g = 1,    b = 0.75 }, -- friendly
---   [6] = {r = 0,    g = 1,    b = 0    }, -- honored
---   [7] = {r = 0.25, g = 0.4,  b = 0.9  }, -- reverted
---   [8] = {r = 0.6,  g = 0.2,  b = 0.8  }, -- exalted
---}
 
 
 -- table recycling
@@ -119,6 +115,7 @@ function mod:OnInitialize()
 
    mod.sessionFactionChanges = new()
    mod.factionGainsCache = new()
+   mod:SetDefaultColors()
 end
 
 function mod:OnEnable()
@@ -193,7 +190,7 @@ function mod:GetDate(delta)
 end
 
 function mod:ReputationLevelDetails(reputation, standingId)
-   local sc = standingColors[standingId]
+   local sc = mod.gdb.colors[standingId]
    local color, rep, title
    if mod.gdb.colorFactions then
       color = fmt("%02x%02x%02x", floor(sc.r*255), floor(sc.g*255), floor(sc.b*255))
@@ -201,7 +198,7 @@ function mod:ReputationLevelDetails(reputation, standingId)
       color = "ffffff"
    end
    rep = reputation - minReputationValues[standingId]
-   title = repTitles[standingId]
+   title = mod.repTitles[standingId]
    return color, rep, title
 end
 
@@ -216,32 +213,33 @@ function mod:GetGainsSummary(id)
       mod.factionGainsCache[today] = new()
       fc = mod.factionGainsCache[today]
    end
-
    if not fc[id] then
       newlyCalculated = true
-      local todayDate = mod:GetDate()
+      local todayDate = mod:GetDate() 
       local yesterDate = mod:GetDate(86400)
       local fh = mod.cdb.factionHistory
-      local todayChange = fh[todayDate] and fh[todayDate][id];
-      local yesterChange = fh[yesterDate] and fh[yesterDate][id];
+      local todayChange = fh[todayDate] and fh[todayDate][id] or 0
+      local yesterChange = fh[yesterDate] and fh[yesterDate][id] or 0
       local weekChange = (todayChange or 0) + (yesterChange or 0)
       for day = 2,6 do
 	 local dayChange = fh[mod:GetDate(day*86400)] -- going back in time
-	 if dayChange then
-	    weekChange = weekChange + dayChange
+	 if dayChange and dayChange[id] then
+	    weekChange = weekChange + dayChange[id]
 	 end
       end
       local monthChange = weekChange
       for day = 7, 29 do
 	 local dayChange = fh[mod:GetDate(day*86400)] -- going back in time
-	 if dayChange then
-	    monthChange = monthChange + dayChange
+	 if dayChange and dayChange[id] then
+	    monthChange = monthChange + dayChange[id]
 	 end
       end
-      fc[id] = newHash("today", todayChange or 0,
-		       "yesterday", yesterChange or 0,
+      fc[id] = newHash("today", todayChange,
+		       "yesterday", yesterChange,
 		       "week", weekChange,
-		       "month", monthChange)
+		       "month", monthChange,
+		       "changed", todayChange ~= 0 or yesterChange ~= 0
+			  or weekChange ~= 0 or monthChange ~= 0)
    end
    return fc[id], newlyCalculated
 end
@@ -249,9 +247,9 @@ end
 ---------------------------------------------------
 -- LDB Display and display utility methods
 
-local function _addIndentedCell(tooltip, text, indentation, font, func, arg)
-   local y, x = tooltip:AddLine()
-   tooltip:SetCell(y, x, text, font or tooltip:GetFont(), "LEFT", 1, nil, indentation)
+local function _addIndentedCell(tooltip, icon, text, indentation, font, func, arg)
+   local y, x = tooltip:AddLine(icon)
+   tooltip:SetCell(y, 2, text, font or tooltip:GetFont(), "LEFT", 1, nil, indentation)
    if func then
       tooltip:SetLineScript(y, "OnMouseUp", func, arg)
    end
@@ -295,7 +293,7 @@ local function _showFactionInfoTooltip(frame, faction)
 	    local sessionChange = mod.sessionFactionChanges[faction.id] or 0
 	    local gs = mod:GetGainsSummary(faction.id)
 	    y = tooltip:AddHeader()
-	    if sessionChange ~= 0 or gs.today ~= 0 or gs.yesterday ~= 0 or gs.month ~= 0 or gs.week ~= 0 then
+	    if sessionChange ~= 0 or gs.changed then
 	       tooltip:SetCell(y, 1, c(L["Recent reputation changes"], "ffd200"), "CENTER", 2)
 	       tooltip:AddSeparator(1)
 	       tooltip:AddLine(L["Session"], delta(sessionChange, true))
@@ -311,6 +309,11 @@ local function _showFactionInfoTooltip(frame, faction)
 	    end
 	 end
 	 
+	 if mod.cdb.watchedFaction == faction.id then
+	    tooltip:AddLine(" ")
+	    tooltip:AddSeparator(1)
+	    tooltip:AddLine(c(L["This faction is currently being monitored."], "ffff00"))
+	 end
 	 tooltip:SetPoint("TOPLEFT", frame, "TOPRIGHT", 10, 0)
 	 tooltip:SetFrameLevel(frame:GetFrameLevel()+1)
 	 tooltip:SetClampedToScreen(true)
@@ -322,11 +325,26 @@ local function _showFactionInfoTooltip(frame, faction)
    end
 end
 
+local function _factionOnClick(frame, faction, button)
+   if button == "LeftButton" then
+      if IsAltKeyDown() then
+	 if faction.hasRep then
+	    mod.cdb.watchedFaction = faction.id
+	 end
+      elseif IsControlKeyDown() then
+      elseif IsShiftKeyDown() then
+      elseif faction.isHeader then
+	 mod.cdb.hf[faction.id] = not mod.cdb.hf[faction.id] or nil
+      end
+   end
+   ldb.OnEnter() -- redraw
+end
+
 function ldb.OnEnter(frame)
    tooltip = QTIP:Acquire("SexyRepTooltip")
    tooltip:EnableMouse(true)
 
-   local numCols = 1
+   local numCols = 2
 
    local showRep = mod.gdb.repTextStyle ~= mod.TEXT_STYLE_STANDING and mod.gdb.repStyle == mod.STYLE_TEXT
    local showStanding = mod.gdb.repTextStyle ~= mod.TEXT_STYLE_REPUTATION and mod.gdb.repStyle == mod.STYLE_TEXT
@@ -357,8 +375,8 @@ function ldb.OnEnter(frame)
    
    local y, x
 
-   y = tooltip:AddHeader(c(L["Faction"], "ffff00"))
-   x = 2
+   y = tooltip:AddHeader("", c(L["Faction"], "ffff00"))
+   x = 3
    if showRepBar then
       tooltip:SetCell(y, x, c(L["Standing"], "ffff00"), "CENTER") x = x + 1
    else
@@ -382,6 +400,7 @@ function ldb.OnEnter(frame)
    local isTopLevelHeader, isChildHeader
    local todaysDate = mod:GetDate()
    local showOnlyChanged = mod.gdb.showOnlyChanged
+   local watchedFaction = mod.cdb.watchedFaction
    local indent, isTopLevelHeader, isChildHeader, sessionChange, today, showRow
    for id, faction in ipairs(mod.allFactions) do
       indent = 0
@@ -409,49 +428,46 @@ function ldb.OnEnter(frame)
 	    if not faction.isHeader then indent = indent + 20 end
 	    folded = faction.isHeader and mod.cdb.hf[faction.id]
 	    local pm = _plusminus(folded)
-	    title = faction.isHeader and fmt("%s |cffffd200%s|r", pm, faction.name) or faction.name
+	    title = faction.isHeader and fmt("%s %s", pm, faction.name) or c(faction.name, "ffd200")
 	 else
-	    title = faction.isHeader and c(faction.name, "ffd200") or faction.name
+	    title = faction.isHeader and faction.name or c(faction.name, "ffd200")
 	 end
 	 local color, rep, repTitle = mod:ReputationLevelDetails(faction.reputation, faction.standingId)
 	 local font
-	 if faction.isHeader then
-	    tooltip:AddLine("")
-	    font = tooltip:GetHeaderFont()
+
+	 local icon = ""
+	 if watchedFaction == faction.id then
+	    icon = [[|TInterface\Icons\Spell_Shadow_EvilEye:20|t]]
 	 end
-	 y = _addIndentedCell(tooltip, title, indent, font,
-			      function(frame, factionId)
-				 mod.cdb.hf[factionId] = not mod.cdb.hf[factionId] or nil
-				 ldb.OnEnter() -- redraw
-			      end, faction.id)
+	 y = _addIndentedCell(tooltip, icon, title, indent, font, _factionOnClick, faction)
 
 	 tooltip:SetLineScript(y, "OnEnter", _showFactionInfoTooltip, faction)
 	 tooltip:SetLineScript(y, "OnLeave", nil)
 	 
 	 if not faction.isHeader or faction.hasRep then
-	    x = 2
+	    x = 3
 	    -- "RIGHT", "CENTER", "RIGHT", "RIGHT")
 	    if showStanding then
 	       tooltip:SetCell(y, x, c(repTitle, color), "LEFT") x = x + 1
 	    end
 	    local maxValue = faction.topValue-faction.bottomValue
 	    if showRep then
-	       tooltip:SetCell(y, x, c(tostring(rep), color), "RIGHT") x = x + 1
+	       tooltip:SetCell(y, x, tostring(rep), "RIGHT") x = x + 1
 	       tooltip:SetCell(y, x, "/", "CENTER") x = x + 1
-	       tooltip:SetCell(y, x, c(tostring(maxValue), color), "RIGHT") x = x + 1
+	       tooltip:SetCell(y, x, tostring(maxValue), "RIGHT") x = x + 1
 	    end
 	    if showRepBar then
-	       tooltip:SetCell(y, x, repTitle, "CENTER", mod.barProvider, standingColors[faction.standingId], rep, maxValue, 120, 12)
+	       tooltip:SetCell(y, x, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
 	       faction.x, faction.y = x, y
 	       tooltip:SetLineScript(y, "OnEnter", function(frame, faction)
-						      tooltip:SetCell(faction.y, faction.x, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, standingColors[faction.standingId], rep, maxValue, 120, 12)
+						      tooltip:SetCell(faction.y, faction.x, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
 						      _showFactionInfoTooltip(frame, faction)
 						   end, faction)
 	       tooltip:SetLineScript(y, "OnLeave", function(frame, faction)
 						      -- Breaks encapsulation but.. otherwise it breaks the code
 						      local lines = tooltip.lines and tooltip.lines[faction.y]
 						      if lines and lines.cells and lines.cells[faction.x] then
-							 tooltip:SetCell(faction.y, faction.x, repTitle, "CENTER", mod.barProvider, standingColors[faction.standingId], rep, maxValue, 120, 12)
+							 tooltip:SetCell(faction.y, faction.x, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
 						      end
 						   end, faction)
 	       x = x + 1
@@ -540,6 +556,7 @@ function mod:COMBAT_TEXT_UPDATE(event, type, faction, amount)
       -- already up to date then
       local gs,upToDate = mod:GetGainsSummary(id)
       if not upToDate then
+	 gs.changed = true
 	 gs.today = gs.today + amount
 	 gs.week  = gs.week + amount
 	 gs.month = gs.month + amount

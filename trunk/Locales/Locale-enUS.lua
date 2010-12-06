@@ -25,10 +25,13 @@ L["Show Percentage"] = true
 L["Show reputation gained or lost in the session and today."] = true
 L["Show your rep as a percentage of the reputation standing (i.e Neutral 1500/3000 = 50%)"] = true
 L["Standing"] = true
+L["Standing Colors"] = true
 L["Standing Only"] = true
 L["Standing Style"] = true
 L["Text"] = true
 L["Text Reputation Style"] = true
+L["The colors used for the bar/text for the reputation standings."] = true
+L["This faction is currently being monitored."] = true
 L["Today"] = true
 L["Whether to show the reputation level as a bar, text or not at all"] = true
 L["Whether to show the standing and/or reputation level text."] = true
