@@ -186,8 +186,6 @@ function mod:ScanFactions(fromTooltip)
       end
    end
    del(foldedHeaders)
-   tooltip = QTIP:Acquire("SexyRepTooltip")
-   QTIP:Release(tooltip)
 end
 
 function mod:GetDate(delta)
@@ -471,17 +469,30 @@ function ldb.OnEnter(frame)
 	       tooltip:SetCell(y, x, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
 	       local xx, yy = x, y
 	       
-	       tooltip:SetLineScript(y, "OnEnter", function(frame, faction)
-						      tooltip:SetCell(yy, xx, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
-						      _showFactionInfoTooltip(frame, faction)
-						   end, faction)
-	       tooltip:SetLineScript(y, "OnLeave", function(frame, faction)
-						      -- Breaks encapsulation but.. otherwise it breaks the code
-						      local lines = tooltip.lines and tooltip.lines[yy]
-						      if lines and lines.cells and lines.cells[xx] then
-							 tooltip:SetCell(yy, xx, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
+	       tooltip:SetLineScript(y, "OnEnter", function(frame, factionid)
+						      local idx = mod.factionIdToIdx[factionid]
+						      local faction
+						      if idx then
+							 local faction = mod.allFactions[idx]
+							 if faction then
+							    tooltip:SetCell(yy, xx, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
+							    _showFactionInfoTooltip(frame, faction)
+							 end
 						      end
-						   end, faction)
+						   end, faction.id)
+	       tooltip:SetLineScript(y, "OnLeave", function(frame, factionid)
+						      local idx = mod.factionIdToIdx[factionid]
+						      if idx then
+							 local faction = mod.allFactions[idx]
+							 if faction then
+							    -- Breaks encapsulation but.. otherwise it breaks the code
+							    local lines = tooltip.lines and tooltip.lines[yy]
+							    if lines and lines.cells and lines.cells[xx] then
+							       tooltip:SetCell(yy, xx, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
+							    end
+							 end
+						      end
+						   end, faction.id)
 	       x = x + 1
 	    end
 	    if showPercentage then
@@ -624,6 +635,7 @@ do
 	       mod.sessionFactionChanges[faction.id] = (mod.sessionFactionChanges[faction.id] or 0) + amount
 	       today[faction.id] = (today[faction.id] or 0) + amount
 
+	       -- Update the cached rep changes here, if needed.
 	       local gs,upToDate = mod:GetGainsSummary(faction.id)
 	       if not upToDate then
 		  gs.changed = true
