@@ -556,8 +556,8 @@ function ldb.OnEnter(frame)
    if frame then
       tooltip:SmartAnchorTo(frame)
    end
---   tooltip:UpdateScrolling(mod.gdb.maxHeight)
-   tooltip:UpdateScrolling()
+   tooltip:SetScrollStep(100)
+   tooltip:UpdateScrolling(mod.gdb.maxHeight)
    tooltip:Show()
 end
 
