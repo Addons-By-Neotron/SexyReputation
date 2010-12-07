@@ -6,4 +6,4 @@ if not L then return end
 -- http://www.wowace.com/projects/sexyreputation/localization/
 -- This file should not be edited manually!
 
---@localization(locale="ruRU", format="lua_additive_table", handle-subnamespaces="handle-subnamespaces")@
+--@localization(locale="ruRU", format="lua_additive_table", handle-unlocalized="english")@
