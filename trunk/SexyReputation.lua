@@ -144,17 +144,18 @@ function mod:FactionID(name)
    return id
 end
 
-function mod:ScanFactions(fromTooltip)
+function mod:ScanFactions(toggleActiveId)
    local foldedHeaders = new()
+   
    mod.allFactions = deepDel(mod.allFactions) or new()
    mod.factionIdToIdx = del(mod.factionIdToIdx) or new()
    mod.factionGainsCache = deepDel(mod.factionGainsCache) or new()
-
 
    -- Iterate through the factions until we run out. We need to unfold
    -- any folded header, which changes the number of factions, so we just
    -- keep iterating until GetFactionInfo return nil
    local idx = 1
+   local fr = mod.cdb.fr
    while true do
       local name, description, standingId, bottomValue, topValue, earnedValue, atWarWith,
       canToggleAtWar, isHeader, isCollapsed, hasRep, isWatched, isChild = GetFactionInfo(idx)
@@ -171,13 +172,29 @@ function mod:ScanFactions(fromTooltip)
 			      "id", mod:FactionID(name))
       mod.allFactions[idx] = faction
       mod.factionIdToIdx[faction.id] = idx
+
+      if faction.id == toggleActiveId then
+	 local isInActive = IsFactionInactive(idx)
+	 if isInActive then
+	    SetFactionActive(idx)
+	 else
+	    SetFactionInactive(idx)
+	 end
+	 mod:ScanFactions() -- we need to rescan fully..
+	 return
+      end
+
       if isHeader and isCollapsed then
 	 foldedHeaders[idx] = true
 	 ExpandFactionHeader(idx)
       end
+      if fr and faction.name == FACTION_INACTIVE then
+	 mod.cdb.hf[faction.id] = true
+      end
       idx = idx + 1
    end
 
+   mod.cdb.fr = false
    
    -- Restore factions folded states
    for id = #mod.allFactions, 1, -1 do
@@ -340,8 +357,8 @@ local function _factionOnClick(frame, faction, button)
 	    end
 	    mod:UpdateLDBText()
 	 end
-      elseif IsControlKeyDown() then
-      elseif IsShiftKeyDown() then
+      elseif IsControlKeyDown() and IsShiftKeyDown() then
+	 mod:ScanFactions(faction.id)
       elseif faction.isHeader then
 	 mod.cdb.hf[faction.id] = not mod.cdb.hf[faction.id] or nil
       end
@@ -410,6 +427,7 @@ function ldb.OnEnter(frame)
    local todaysDate = mod:GetDate()
    local showOnlyChanged = mod.gdb.showOnlyChanged
    local watchedFaction = mod.cdb.watchedFaction
+   local gridLines = mod.gdb.gridLines
    local indent, isTopLevelHeader, isChildHeader, sessionChange, today, showRow
    for id, faction in ipairs(mod.allFactions) do
       indent = 0
@@ -505,6 +523,9 @@ function ldb.OnEnter(frame)
 	    if (sessionChange or today) and colorFactions and not showOnlyChanged then
 	       tooltip:SetLineColor(y, 1, 1, 1, 0.2)
 	    end
+	    if gridLines then
+	       tooltip:AddSeparator(0.5, 1, 1, 1, 0.5)
+	    end
 	 end
 	 if folded then
 	    if faction.isChild then
@@ -529,11 +550,13 @@ function ldb.OnEnter(frame)
    tooltip:SetCell(y, 2, c(L["Click:"], "eda55f") .. " "..c(L["Fold / unfold faction headers."], "ffd200"), "LEFT", numCols-1)
    y = tooltip:AddLine("")
    tooltip:SetCell(y, 2, c(L["Alt-Click:"], "eda55f").. " "..c(L["Toggle faction tracking state on and off."], "ffd200"), "LEFT", numCols-1)
+   y = tooltip:AddLine("")
+   tooltip:SetCell(y, 2, c(L["Shift+Ctrl-Click:"], "eda55f").. " "..c(L["Toggle faction inactive state."], "ffd200"), "LEFT", numCols-1)
    
    if frame then
       tooltip:SmartAnchorTo(frame)
    end
-   tooltip:UpdateScrolling()
+   tooltip:UpdateScrolling(mod.gdb.maxHeight)
    tooltip:Show()
 end
 

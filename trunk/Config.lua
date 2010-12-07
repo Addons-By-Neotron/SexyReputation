@@ -46,7 +46,8 @@ mod.TEXT_STYLE_BOTH = 3
 mod.defaults = {
    char = {
       factionHistory = {}, -- the gains of faction, per day
-      hf = {}
+      hf = {},
+      fr = true,
    },
    global = {
       factionLookup = {},
@@ -64,6 +65,8 @@ mod.defaults = {
       trackRep = true,
       trackPercentage = true,
       trackGains = true,
+      maxHeight = 1000,
+      gridLines = false, 
    }
 }
 
@@ -79,6 +82,12 @@ mod.options = {
 	 name = L["Tooltip Options"],
 	 desc = L["Configure the look and feel of the faction tooltip."],
 	 args = {
+	    maxHeight = {
+	       type = "range",
+	       name = L["Tooltip max height"],
+	       desc = L["Maximum tooltip height, in pixels. Regardless of this value, the tooltip will be sized to fit the screen."],
+	       min = 100, max = 3000, step = 5
+	    },
 	    repTextStyle = {
 	       type = "select",
 	       values = {
@@ -95,6 +104,11 @@ mod.options = {
 	       desc = L["Color standing and reputation fields based on your standing with the different factions."],
 	       order = 300, 
 	       disabled = function() return mod.gdb.repStyle ~= mod.STYLE_TEXT end,
+	    },
+	    gridLines = {
+	       type = "toggle",
+	       name = L["Show Row Lines"],
+	       desc = L["Show lines after each row so you can more easily see which values below to which reputation"],
 	    },
 	    repStyle = {
 	       type = "select",
