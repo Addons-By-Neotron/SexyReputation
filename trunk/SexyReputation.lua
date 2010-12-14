@@ -154,9 +154,9 @@ function mod:ScanFactions(toggleActiveId)
    -- Iterate through the factions until we run out. We need to unfold
    -- any folded header, which changes the number of factions, so we just
    -- keep iterating until GetFactionInfo return nil
-   local idx = 1
    local fr = mod.cdb.fr
-   while true do
+
+   for idx = 1, 500 do 
       local name, description, standingId, bottomValue, topValue, earnedValue, atWarWith,
       canToggleAtWar, isHeader, isCollapsed, hasRep, isWatched, isChild = GetFactionInfo(idx)
       if not name then  break end -- last one reached
@@ -191,7 +191,6 @@ function mod:ScanFactions(toggleActiveId)
       if fr and faction.name == FACTION_INACTIVE then
 	 mod.cdb.hf[faction.id] = true
       end
-      idx = idx + 1
    end
 
    mod.cdb.fr = false
