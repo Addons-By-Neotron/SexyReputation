@@ -121,8 +121,8 @@ function mod:OnInitialize()
 end
 
 function mod:OnEnable()
-   mod:RegisterEvent("COMBAT_TEXT_UPDATE");
-   mod:UpdateLDBText()
+   mod:RegisterEvent("COMBAT_TEXT_UPDATE")
+   mod:ScheduleTimer("UpdateLDBText", 3)
    mod:ScheduleTimer("ScanFactions", 5)
 end
 
