@@ -1,5 +1,5 @@
-## Interface: 40300
-## X-Compatible-With: 40300
+## Interface: 50001
+## X-Compatible-With: 50001
 ## Title: Sexy Reputations
 ## Notes: A fancy LDB reputation display, show faction reputation and reputation change history
 ## Author: NeoTron
