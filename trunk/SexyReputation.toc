@@ -4,7 +4,7 @@
 ## Notes: A fancy LDB reputation display, show faction reputation and reputation change history
 ## Author: NeoTron
 ## Version: 1.0.@project-revision@
-## X-Category: Combat
+## X-Category: Tooltip
 ## X-eMail: neotron@gmail.com
 ## OptionalDeps: Ace3, LibDatabroker-1.1, LibMagicUtil-1.0, LibQTip-1.0, LibDataBroker-1.1, LibDropdown-1.0
 ## SavedVariables: SexyRepDB
