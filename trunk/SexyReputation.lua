@@ -159,6 +159,8 @@ function mod:ScanFactions(toggleActiveId)
    for idx = 1, 500 do 
       local name, description, standingId, bottomValue, topValue, earnedValue, atWarWith,
       canToggleAtWar, isHeader, isCollapsed, hasRep, isWatched, isChild = GetFactionInfo(idx)
+      local nextName = GetFactionInfo(idx + 1)
+      if name == nextName then break end -- bugfix
       if not name then  break end -- last one reached
       local faction = newHash("name", name,
 			      "desc", description,
