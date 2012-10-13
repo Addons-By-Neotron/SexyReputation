@@ -60,3 +60,5 @@ L["Using the faction tooltip:"] = true
 L["Whether to show the reputation level as a bar, text or not at all"] = true
 L["Whether to show the standing and/or reputation level text."] = true
 L["Yesterday"] = true
+L["Remaining"] = true
+L["Repetitions"] = true

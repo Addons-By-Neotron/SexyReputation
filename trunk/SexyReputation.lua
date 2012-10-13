@@ -323,6 +323,22 @@ local function _showFactionInfoTooltip(frame, faction)
 	       tooltip:AddLine(L["Yesterday"], delta(gs.yesterday, true))
 	       tooltip:AddLine(L["Last Week"], delta(gs.week, true))
 	       tooltip:AddLine(L["Last Month"], delta(gs.month, true))
+
+               local color, rep, repTitle = mod:ReputationLevelDetails(faction.reputation, faction.standingId)
+               local remaining = 42999 - faction.bottomValue - rep
+	       if remaining > 0 then
+                   tooltip:AddLine(L["Remaining"], remaining)
+		end
+
+	       local repetitions
+	       if gs.today > 0 then
+                   repetitions = remaining/gs.today
+               elseif gs.yesterday > 0 then
+	           repetitions = remaining/gs.yesterday
+	       end
+	       if repetitions then
+                   tooltip:AddLine(L["Repetitions"], string.format("%.2f", repetitions))
+               end
 	    else
 	       tooltip:SetColumnLayout(1, "LEFT")
 	       tooltip:SetCell(y, 1, c(L["Recent reputation changes"], "ffd200"))
