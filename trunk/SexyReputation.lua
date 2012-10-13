@@ -1,6 +1,6 @@
 local SexyReputations = LibStub("AceAddon-3.0"):NewAddon("Sexy Reputations", "AceEvent-3.0", "AceTimer-3.0", "AceConsole-3.0")
 local mod = SexyReputations
-SR = mod
+local tooltip
 
 local GetNumFactions = GetNumFactions
 local GetFactionInfo = GetFactionInfo

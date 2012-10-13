@@ -23,7 +23,7 @@ function mod:SetDefaultColors()
 end
 
 function mod:SetColorOpt(arg, r, g, b)
-   color = mod.gdb.colors[mod.colorIds[arg[#arg]]]
+   local color = mod.gdb.colors[mod.colorIds[arg[#arg]]]
    color.r = r
    color.g = g
    color.b = b
