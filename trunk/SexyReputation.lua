@@ -10,7 +10,7 @@ local IsAltKeyDown = IsAltKeyDown
 local IsControlKeyDown = IsControlKeyDown
 local IsShiftKeyDown = IsShiftKeyDown
 local tconcat = table.concat
-
+local GetFriendshipReputation = GetFriendshipReputation
 local FL
 
 local L        = LibStub("AceLocale-3.0"):GetLocale("SexyReputation", false)
