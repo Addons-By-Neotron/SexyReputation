@@ -158,10 +158,22 @@ function mod:ScanFactions(toggleActiveId)
 
    for idx = 1, 500 do 
       local name, description, standingId, bottomValue, topValue, earnedValue, atWarWith,
-      canToggleAtWar, isHeader, isCollapsed, hasRep, isWatched, isChild = GetFactionInfo(idx)
+      canToggleAtWar, isHeader, isCollapsed, hasRep, isWatched, isChild, factionId = GetFactionInfo(idx)
       local nextName = GetFactionInfo(idx + 1)
       if name == nextName then break end -- bugfix
       if not name then  break end -- last one reached
+      local friendId, friendRep, friendMaxRep, _, friendshipText, _, friendTextLevel, friendThresh, nextFriendThresh = GetFriendshipReputation(factionId);
+      local isCapped
+      if (friendId ~= nil) then
+         if nextFriendThresh then
+            bottomValue = friendThresh
+            topValue = nextFriendThresh 
+            earnedValue = friendRep
+         else
+            bottomValue, topValue, earnedValue = 0, 1, 1
+            isCapped = true
+         end
+      end
       local faction = newHash("name", name,
 			      "desc", description,
 			      "bottomValue", bottomValue,
@@ -171,7 +183,12 @@ function mod:ScanFactions(toggleActiveId)
 			      "standingId", standingId,
 			      "hasRep", hasRep or earnedValue ~= 0,
 			      "isChild", isChild,
+                              "friendId", friendId,
+                              "friendshipText", friendshipText,
+                              "friendTextLevel", friendTextLevel,
+                              "friendIsCapped", isCapped,
 			      "id", mod:FactionID(name))
+      print(faction.name, faction.topValue, faction.reputation, faction.desc, friendTextLevel)
       mod.allFactions[idx] = faction
       mod.factionIdToIdx[faction.id] = idx
 
@@ -211,17 +228,24 @@ function mod:GetDate(delta)
    return dt.year * 10000 + dt.month * 100 + dt.day
 end
 
-function mod:ReputationLevelDetails(reputation, standingId)
-   local sc = mod.gdb.colors[standingId]
-   local color, rep, title
+function mod:ReputationLevelDetails(faction) 
+   local reputation, standingId, friendId = faction.reputation, faction.standingId, faction.friendId
+   local sc, color, rep, title, colorId
+   rep = reputation - faction.bottomValue
+   if friendId then 
+      title = faction.friendTextLevel
+      colorId = mod.colorIds.friendly
+   else
+      title = mod.repTitles[standingId]
+      colorId = standingId
+   end
+   sc = mod.gdb.colors[colorId]
    if mod.gdb.colorFactions then
       color = fmt("%02x%02x%02x", floor(sc.r*255), floor(sc.g*255), floor(sc.b*255))
    else
       color = "ffffff"
    end
-   rep = reputation - minReputationValues[standingId]
-   title = mod.repTitles[standingId]
-   return color, rep, title
+   return color, rep, title, colorId
 end
 
 function mod:GetGainsSummary(id)
@@ -305,11 +329,20 @@ local function _showFactionInfoTooltip(frame, faction)
 	 local y
 	 tooltip:SetColumnLayout(faction.hasRep and 2 or 1, "LEFT", "RIGHT")
 	 tooltip:Clear()
-	 tooltip:AddHeader(c(faction.name, "ffd200"))
+         local header = faction.name
+         if faction.friendTextLevel then
+            header = header .. " - "..faction.friendTextLevel.." ("..faction.standingId.." / 8)"
+         end
+	 tooltip:AddHeader(c(header, "ffd200"))
 	 if faction.desc and faction.desc ~= '' then
 	    tooltip:SetCell((tooltip:AddLine()), 1, faction.desc, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
 	    tooltip:AddLine(" ")
 	 end
+	 if faction.friendshipText and faction.friendshipText ~= '' then
+	    tooltip:SetCell((tooltip:AddLine()), 1, faction.friendshipText, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
+	    tooltip:AddLine(" ")
+	 end
+            
 	 if faction.hasRep then
 	    -- Show recent reputtion history
 	    local sessionChange = mod.sessionFactionChanges[faction.id] or 0
@@ -324,20 +357,21 @@ local function _showFactionInfoTooltip(frame, faction)
 	       tooltip:AddLine(L["Last Week"], delta(gs.week, true))
 	       tooltip:AddLine(L["Last Month"], delta(gs.month, true))
 
-               local color, rep, repTitle = mod:ReputationLevelDetails(faction.reputation, faction.standingId)
-               local remaining = 42999 - faction.bottomValue - rep
-	       if remaining > 0 then
-                   tooltip:AddLine(L["Remaining"], remaining)
-		end
-
-	       local repetitions
-	       if gs.today > 0 then
-                   repetitions = remaining/gs.today
-               elseif gs.yesterday > 0 then
-	           repetitions = remaining/gs.yesterday
-	       end
-	       if repetitions then
-                   tooltip:AddLine(L["Repetitions"], string.format("%.2f", repetitions))
+               local color, rep, repTitle = mod:ReputationLevelDetails(faction)
+               if not faction.friendId then
+                  local remaining = 42999 - faction.bottomValue - rep
+                  if remaining > 0 then
+                     tooltip:AddLine(L["Remaining"], remaining)
+                  end
+                  local repetitions
+                  if gs.today > 0 then
+                     repetitions = remaining/gs.today
+                  elseif gs.yesterday > 0 then
+                     repetitions = remaining/gs.yesterday
+                  end
+                  if repetitions then
+                     tooltip:AddLine(L["Repetitions"], string.format("%.2f", repetitions))
+                  end
                end
 	    else
 	       tooltip:SetColumnLayout(1, "LEFT")
@@ -476,7 +510,7 @@ function ldb.OnEnter(frame)
 	 else
 	    title = faction.isHeader and faction.name or c(faction.name, "ffd200")
 	 end
-	 local color, rep, repTitle = mod:ReputationLevelDetails(faction.reputation, faction.standingId)
+	 local color, rep, repTitle, colorId = mod:ReputationLevelDetails(faction)
 	 local font
 
 	 local icon = ""
@@ -501,7 +535,7 @@ function ldb.OnEnter(frame)
 	       tooltip:SetCell(y, x, tostring(maxValue), "RIGHT") x = x + 1
 	    end
 	    if showRepBar then
-	       tooltip:SetCell(y, x, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
+	       tooltip:SetCell(y, x, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[colorId], rep, maxValue, 120, 12)
 	       local xx, yy = x, y
 	       
 	       tooltip:SetLineScript(y, "OnEnter", function(frame, factionid)
@@ -510,7 +544,7 @@ function ldb.OnEnter(frame)
 						      if idx then
 							 local faction = mod.allFactions[idx]
 							 if faction then
-							    tooltip:SetCell(yy, xx, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
+							    tooltip:SetCell(yy, xx, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, mod.gdb.colors[colorId], rep, maxValue, 120, 12)
 							    _showFactionInfoTooltip(frame, faction)
 							 end
 						      end
@@ -523,7 +557,7 @@ function ldb.OnEnter(frame)
 							    -- Breaks encapsulation but.. otherwise it breaks the code
 							    local lines = tooltip.lines and tooltip.lines[yy]
 							    if lines and lines.cells and lines.cells[xx] then
-							       tooltip:SetCell(yy, xx, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[faction.standingId], rep, maxValue, 120, 12)
+							       tooltip:SetCell(yy, xx, repTitle, "CENTER", mod.barProvider, mod.gdb.colors[colorId], rep, maxValue, 120, 12)
 							    end
 							 end
 						      end
@@ -622,7 +656,7 @@ function mod:UpdateLDBText()
    if gdb.trackName then      
       fields[1] = faction.name
    end
-   local color, rep, repTitle = mod:ReputationLevelDetails(faction.reputation, faction.standingId)
+   local color, rep, repTitle = mod:ReputationLevelDetails(faction)
    if gdb.trackStanding then
       fields[#fields+1] = c(repTitle, color)
    end
