@@ -188,7 +188,6 @@ function mod:ScanFactions(toggleActiveId)
                               "friendTextLevel", friendTextLevel,
                               "friendIsCapped", isCapped,
 			      "id", mod:FactionID(name))
-      print(faction.name, faction.topValue, faction.reputation, faction.desc, friendTextLevel)
       mod.allFactions[idx] = faction
       mod.factionIdToIdx[faction.id] = idx
 
