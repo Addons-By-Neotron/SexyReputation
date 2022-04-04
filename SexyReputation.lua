@@ -560,7 +560,7 @@ function ldb.OnEnter(frame)
 
                 --Paragon adjustments
                 if faction.isParagon then
-                    repTitle = "Paragon"
+                    repTitle = L["Paragon"]
                     barColor = {r=0, g=171/255, b=240/255}
                     color = "00ABF0"
 
