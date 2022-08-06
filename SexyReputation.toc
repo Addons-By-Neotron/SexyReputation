@@ -1,9 +1,10 @@
 ## Interface: 90205
 ## Interface-Classic: 11403
 ## Interface-BCC: 20504
-## Interface-Retail: 90205
+## Interface-Wrath: 30400
 ## X-Curse-Project-ID: 27993
 ## X-WoWI-ID: 23129
+## X-Wago-ID: J96E42Ng
 ## Title: Sexy Reputation
 ## Notes: A fancy LDB reputation display, show faction reputation and reputation change history
 ## Author: NeoTron
