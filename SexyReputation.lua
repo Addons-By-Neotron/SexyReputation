@@ -10,7 +10,28 @@ local IsAltKeyDown = IsAltKeyDown
 local IsControlKeyDown = IsControlKeyDown
 local IsShiftKeyDown = IsShiftKeyDown
 local tconcat = table.concat
-local GetFriendshipReputation = GetFriendshipReputation
+
+local GetFriendshipReputation = function(factionId)
+    if not factionId then return nil end
+    if C_GossipInfo then
+        local rep = C_GossipInfo.GetFriendshipReputation(factionId)
+        if not rep or rep.friendshipFactionID == 0 then return nil end
+        return rep.friendshipFactionID,
+          rep.standing,
+          rep.maxRep,
+          rep.name,
+          rep.text,
+          rep.texture,
+          rep.reaction,
+          rep.reactionThreshold,
+          rep.nextThreshold,
+          rep.reversedColor,
+          rep.overrideColor
+    elseif GtFriendshipReputation then
+        return GetFriendshipReputation(factionId)
+    end
+end
+
 local FL
 
 local L        = LibStub("AceLocale-3.0"):GetLocale("SexyReputation", false)
@@ -42,7 +63,7 @@ mod.repTitles = {
 
 -- names, used for looking up colors
 mod.colorIds = {
-    hated = 1, hostile = 2, unfriendly = 3, neutral = 4, friendly = 5, honored = 6, revered = 7, exalted = 8
+    hated = 1, hostile = 2, unfriendly = 3, neutral = 4, friendly = 5, honored = 6, revered = 7, exalted = 8, renown = 9
 }
 
 local minReputationValues =  {
@@ -145,11 +166,6 @@ function mod:FactionID(name)
     return id
 end
 
--- Classic compatibility
-if GetFriendshipReputation == nil then
-    function GetFriendshipReputation() return nil end
-end
-
 function mod:ScanFactions(toggleActiveId)
     local foldedHeaders = new()
 
@@ -167,13 +183,24 @@ function mod:ScanFactions(toggleActiveId)
         canToggleAtWar, isHeader, isCollapsed, hasRep, isWatched, isChild, factionId = GetFactionInfo(idx)
 
         local isParagon, paraVal, paraThreshold, paraRewardPending
+        local isRenown, renownTitle
 
-        --check if paragon and grab info
         if factionId then
+            --check if paragon and grab info
             isParagon = C_Reputation and C_Reputation.IsFactionParagon(factionId)
 
             if isParagon then
                 paraVal, paraThreshold, _, paraRewardPending, _ = C_Reputation.GetFactionParagonInfo(factionId)
+            end
+
+            isRenown = C_Reputation and C_Reputation.IsMajorFaction(factionId)
+            if isRenown then
+
+                local majorFactionData = C_MajorFactions.GetMajorFactionData(factionId)
+                renownTitle = RENOWN_LEVEL_LABEL .. majorFactionData.renownLevel
+                bottomValue, topValue = 0, majorFactionData.renownLevelThreshold
+                local isCapped = C_MajorFactions.HasMaximumRenown(factionId)
+                earnedValue = isCapped and majorFactionData.renownLevelThreshold or majorFactionData.renownReputationEarned or 0
             end
         end
 
@@ -181,7 +208,7 @@ function mod:ScanFactions(toggleActiveId)
 
         if name == nextName and nextName ~= "Guild" then break end -- bugfix
         if not name then  break end -- last one reached
-        local friendId, friendRep, friendMaxRep, _, friendshipText, _, friendTextLevel, friendThresh, nextFriendThresh =  GetFriendshipReputation(factionId)
+        local friendId, friendRep, _, _, friendshipText, _, friendTextLevel, friendThresh, nextFriendThresh = GetFriendshipReputation(factionId)
         local isCapped
         if (friendId ~= nil) then
             if nextFriendThresh then
@@ -206,6 +233,8 @@ function mod:ScanFactions(toggleActiveId)
                 "paraVal", paraVal or nil,
                 "paraThresh", paraThreshold or nil,
                 "paraRewardPending", paraRewardPending or nil,
+                "isRenown", isRenown or false,
+                "renownTitle", renownTitle,
                 "isChild", isChild,
                 "friendId", friendId,
                 "friendshipText", friendshipText,
@@ -255,7 +284,10 @@ function mod:ReputationLevelDetails(faction)
     local reputation, standingId, friendId = faction.reputation, faction.standingId, faction.friendId
     local sc, color, rep, title, colorId
     rep = reputation - faction.bottomValue
-    if friendId then
+    if faction.isRenown then
+        title = faction.renownTitle
+        colorId = mod.colorIds.renown
+    elseif friendId then
         title = faction.friendTextLevel
         colorId = mod.colorIds.friendly
     else
@@ -366,7 +398,10 @@ local function _showFactionInfoTooltip(frame, faction)
                 tooltip:SetCell((tooltip:AddLine()), 1, faction.friendshipText, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
                 tooltip:AddLine(" ")
             end
-
+            if faction.isRenown then
+                tooltip:SetCell((tooltip:AddLine()), 1, faction.renownTitle, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
+                tooltip:AddLine(" ")
+            end
             if faction.hasRep then
                 -- Show recent reputtion history
                 local sessionChange = mod.sessionFactionChanges[faction.id] or 0
@@ -383,7 +418,6 @@ local function _showFactionInfoTooltip(frame, faction)
 
                     local color, rep, repTitle = mod:ReputationLevelDetails(faction)
                     if not faction.friendId then
-
                         local remaining = faction.isParagon and (faction.paraThresh - faction.paraVal % faction.paraThresh) or (42999 - faction.bottomValue - rep)
                         if remaining > 0 then
                             tooltip:AddLine(L["Remaining"], remaining)

@@ -20,6 +20,9 @@ function mod:SetDefaultColors()
 	if not mod.gdb.colors then
 		mod.gdb.colors = FACTION_BAR_COLORS
 	end
+	if #mod.gdb.colors == 8 then
+		mod.gdb.colors[9] = BLUE_FONT_COLOR
+	end
 end
 
 function mod:SetColorOpt(arg, r, g, b)
@@ -98,14 +101,18 @@ mod.options = {
 					name = L["Text Reputation Style"],
 					desc = L["Whether to show the standing and/or reputation level text."],
 					order = 200,
-					disabled = function() return mod.gdb.repStyle ~= mod.STYLE_TEXT end,
+					disabled = function()
+						return mod.gdb.repStyle ~= mod.STYLE_TEXT
+					end,
 				},
 				colorFactions = {
 					type = "toggle",
 					name = L["Color Text"],
 					desc = L["Color standing and reputation fields based on your standing with the different factions."],
 					order = 300,
-					disabled = function() return mod.gdb.repStyle ~= mod.STYLE_TEXT end,
+					disabled = function()
+						return mod.gdb.repStyle ~= mod.STYLE_TEXT
+					end,
 				},
 				gridLines = {
 					type = "toggle",
@@ -115,7 +122,7 @@ mod.options = {
 				repStyle = {
 					type = "select",
 					values = {
-						L["Bar"], L["Text"],  L["None"]
+						L["Bar"], L["Text"], L["None"]
 					},
 					order = 100,
 					name = L["Standing Style"],
@@ -236,6 +243,12 @@ mod.options = {
 					name = mod.repTitles[8],
 					hasAlpha = false,
 					order = 8,
+				},
+				renown = {
+					type = "color",
+					name = RENOWN_LEVEL_LABEL,
+					hasAlpha = false,
+					order = 9,
 				},
 			},
 		},
