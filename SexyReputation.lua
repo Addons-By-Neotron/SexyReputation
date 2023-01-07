@@ -10,25 +10,27 @@ local IsAltKeyDown = IsAltKeyDown
 local IsControlKeyDown = IsControlKeyDown
 local IsShiftKeyDown = IsShiftKeyDown
 local tconcat = table.concat
-
-local GetFriendshipReputation = function(factionId)
-    if not factionId then return nil end
-    if C_GossipInfo then
-        local rep = C_GossipInfo.GetFriendshipReputation(factionId)
-        if not rep or rep.friendshipFactionID == 0 then return nil end
-        return rep.friendshipFactionID,
-          rep.standing,
-          rep.maxRep,
-          rep.name,
-          rep.text,
-          rep.texture,
-          rep.reaction,
-          rep.reactionThreshold,
-          rep.nextThreshold,
-          rep.reversedColor,
-          rep.overrideColor
-    elseif GtFriendshipReputation then
-        return GetFriendshipReputation(factionId)
+local IsMajorFaction = C_Reputation and C_Reputation.IsMajorFaction
+local GetFriendshipReputation = GetFriendshipReputation
+if not GetFriendshipReputation then
+    local CGossipRep = C_GossipInfo and C_GossipInfo.GetFriendshipReputation
+    local GetFriendshipReputation = function(factionId)
+        if not factionId then return nil end
+        if CGossipRep then
+            local rep = CGossipRep(factionId)
+            if not rep or rep.friendshipFactionID == 0 then return nil end
+            return rep.friendshipFactionID,
+            rep.standing,
+            rep.maxRep,
+            rep.name,
+            rep.text,
+            rep.texture,
+            rep.reaction,
+            rep.reactionThreshold,
+            rep.nextThreshold,
+            rep.reversedColor,
+            rep.overrideColor
+        end
     end
 end
 
@@ -193,7 +195,7 @@ function mod:ScanFactions(toggleActiveId)
                 paraVal, paraThreshold, _, paraRewardPending, _ = C_Reputation.GetFactionParagonInfo(factionId)
             end
 
-            isRenown = C_Reputation and C_Reputation.IsMajorFaction(factionId)
+            isRenown = IsMajorFaction and IsMajorFaction(factionId)
             if isRenown then
 
                 local majorFactionData = C_MajorFactions.GetMajorFactionData(factionId)
