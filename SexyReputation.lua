@@ -184,7 +184,7 @@ function mod:ScanFactions(toggleActiveId)
         canToggleAtWar, isHeader, isCollapsed, hasRep, isWatched, isChild, factionId = GetFactionInfo(idx)
 
         local isParagon, paraVal, paraThreshold, paraRewardPending
-        local isRenown, renownTitle
+        local isRenown, renownTitle, renownLevel, maxRenownLevels
 
         if factionId then
             --check if paragon and grab info
@@ -198,7 +198,9 @@ function mod:ScanFactions(toggleActiveId)
             if isRenown then
 
                 local majorFactionData = C_MajorFactions.GetMajorFactionData(factionId)
-                renownTitle = RENOWN_LEVEL_LABEL .. majorFactionData.renownLevel
+                renownLevel = majorFactionData.renownLevel
+                maxRenownLevels = #C_MajorFactions.GetRenownLevels(2507)
+                renownTitle = RENOWN_LEVEL_LABEL .. renownLevel
                 bottomValue, topValue = 0, majorFactionData.renownLevelThreshold
                 local isCapped = C_MajorFactions.HasMaximumRenown(factionId)
                 earnedValue = isCapped and majorFactionData.renownLevelThreshold or majorFactionData.renownReputationEarned or 0
@@ -236,6 +238,8 @@ function mod:ScanFactions(toggleActiveId)
                 "paraRewardPending", paraRewardPending or nil,
                 "isRenown", isRenown or false,
                 "renownTitle", renownTitle,
+                "renownLevel", renownLevel,
+                "maxRenownLevels", maxRenownLevels,
                 "isChild", isChild,
                 "friendId", friendId,
                 "friendshipText", friendshipText,
@@ -419,7 +423,10 @@ local function _showFactionInfoTooltip(frame, faction)
 
                     local color, rep, repTitle = mod:ReputationLevelDetails(faction)
                     if not faction.friendId then
-                        local remaining = faction.isParagon and (faction.paraThresh - faction.paraVal % faction.paraThresh) or (42999 - faction.bottomValue - rep)
+                        local remaining =
+                            (faction.isParagon and (faction.paraThresh - faction.paraVal % faction.paraThresh))
+                            or (faction.isRenown and (faction.topValue * (faction.maxRenownLevels-faction.renownLevel) - rep))
+                            or (42999 - faction.bottomValue - rep)
                         if remaining > 0 then
                             tooltip:AddLine(L["Remaining"], remaining)
                         end
