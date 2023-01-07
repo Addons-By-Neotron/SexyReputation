@@ -196,14 +196,16 @@ function mod:ScanFactions(toggleActiveId)
 
             isRenown = IsMajorFaction and IsMajorFaction(factionId)
             if isRenown then
-
                 local majorFactionData = C_MajorFactions.GetMajorFactionData(factionId)
                 renownLevel = majorFactionData.renownLevel
                 maxRenownLevels = #C_MajorFactions.GetRenownLevels(2507)
                 renownTitle = RENOWN_LEVEL_LABEL .. renownLevel
-                bottomValue, topValue = 0, majorFactionData.renownLevelThreshold
+                bottomValue = majorFactionData.renownLevelThreshold*(renownLevel-1)
+                topValue = bottomValue + majorFactionData.renownLevelThreshold
+
                 local isCapped = C_MajorFactions.HasMaximumRenown(factionId)
-                earnedValue = isCapped and majorFactionData.renownLevelThreshold or majorFactionData.renownReputationEarned or 0
+                earnedValue = isCapped and (majorFactionData.renownLevelThreshold*(maxRenownLevels-1))
+                        or (bottomValue + majorFactionData.renownReputationEarned) or 0
             end
         end
 
@@ -423,9 +425,12 @@ local function _showFactionInfoTooltip(frame, faction)
 
                     local color, rep, repTitle = mod:ReputationLevelDetails(faction)
                     if not faction.friendId then
+                        if isRenown then
+                            print(faction.name, faction.topValue, faction.bottomValue, faction.maxRenownLevels, rep)
+                        end
                         local remaining =
                             (faction.isParagon and (faction.paraThresh - faction.paraVal % faction.paraThresh))
-                            or (faction.isRenown and (faction.topValue * (faction.maxRenownLevels-faction.renownLevel) - rep))
+                            or (faction.isRenown and ((faction.topValue - faction.bottomValue)* (faction.maxRenownLevels-1) - faction.reputation))
                             or (42999 - faction.bottomValue - rep)
                         if remaining > 0 then
                             tooltip:AddLine(L["Remaining"], remaining)
