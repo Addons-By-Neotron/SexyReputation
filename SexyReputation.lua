@@ -14,23 +14,22 @@ local IsMajorFaction = C_Reputation and C_Reputation.IsMajorFaction
 local GetFriendshipReputation = GetFriendshipReputation
 if not GetFriendshipReputation then
     local CGossipRep = C_GossipInfo and C_GossipInfo.GetFriendshipReputation
-    local GetFriendshipReputation = function(factionId)
-        if not factionId then return nil end
-        if CGossipRep then
-            local rep = CGossipRep(factionId)
-            if not rep or rep.friendshipFactionID == 0 then return nil end
-            return rep.friendshipFactionID,
-            rep.standing,
-            rep.maxRep,
-            rep.name,
-            rep.text,
-            rep.texture,
-            rep.reaction,
-            rep.reactionThreshold,
-            rep.nextThreshold,
-            rep.reversedColor,
-            rep.overrideColor
-        end
+    GetFriendshipReputation = function(factionId)
+        if not factionId or not CGossipRep then return nil end
+        local rep = CGossipRep(factionId)
+        if not rep or rep.friendshipFactionID == 0 then return nil end
+        return
+          rep.friendshipFactionID,
+          rep.standing,
+          rep.maxRep,
+          rep.name,
+          rep.text,
+          rep.texture,
+          rep.reaction,
+          rep.reactionThreshold,
+          rep.nextThreshold,
+          rep.reversedColor,
+          rep.overrideColor
     end
 end
 
