@@ -880,7 +880,7 @@ function barCellPrototype:InitializeCell()
     self.fontString = self.bar:CreateFontString()
     self.fontString:SetAllPoints(self.bar)
     self.fontString:SetFontObject(GameTooltipText)
-    self.fontString:SetJustifyV("CENTER")
+    self.fontString:SetJustifyV("MIDDLE")
 end
 
 function barCellPrototype:SetupCell(tooltip, value, justification, font, color, rep, maxRep, width, height)
