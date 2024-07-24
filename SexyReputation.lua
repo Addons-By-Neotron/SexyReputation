@@ -2,8 +2,41 @@ SexyReputation = LibStub("AceAddon-3.0"):NewAddon("Sexy Reputations", "AceEvent-
 local mod = SexyReputation
 local tooltip
 
-local GetNumFactions = GetNumFactions
+local GetNumFactions = GetNumFactions or C_Reputation.GetNumFactions
 local GetFactionInfo = GetFactionInfo
+
+-- 11.0 changed format, just use the old one for now.
+if not GetFactionInfo then
+    GetFactionInfo = function(factionIndex)
+        if not factionIndex then
+            return nil
+        end
+
+        local factionData = C_Reputation.GetFactionDataByIndex(factionIndex)
+        if not factionData then
+            return nil
+        end
+
+        return
+            factionData.name,
+            factionData.description,
+            factionData.reaction,
+            factionData.currentReactionThreshold,
+            factionData.nextReactionThreshold,
+            factionData.currentStanding,
+            factionData.atWarWith,
+            factionData.canToggleAtWar,
+            factionData.isHeader,
+            factionData.isCollapsed,
+            factionData.isHeaderWithRep,
+            factionData.isWatched,
+            factionData.isChild,
+            factionData.factionID,
+            factionData.hasBonusRepGain,
+            factionData.canSetInactive
+    end
+end
+
 local fmt = string.format
 local floor = math.floor
 local IsAltKeyDown = IsAltKeyDown
@@ -33,6 +66,7 @@ if not GetFriendshipReputation then
     end
 end
 
+local ExpandFactionHeader = ExpandFactionHeader or C_Reputation.ExpandFactionHeader
 local FL
 
 local L        = LibStub("AceLocale-3.0"):GetLocale("SexyReputation", false)
