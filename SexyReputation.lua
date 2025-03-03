@@ -233,7 +233,7 @@ function mod:ScanFactions(toggleActiveId)
                 local majorFactionData = C_MajorFactions.GetMajorFactionData(factionId)
                 renownLevel = majorFactionData.renownLevel
                 maxRenownLevels = #C_MajorFactions.GetRenownLevels(2507)
-                renownTitle = RENOWN_LEVEL_LABEL .. renownLevel
+                renownTitle = fmt(RENOWN_LEVEL_LABEL, renownLevel)
                 bottomValue = majorFactionData.renownLevelThreshold*(renownLevel-1)
                 topValue = bottomValue + majorFactionData.renownLevelThreshold
 
