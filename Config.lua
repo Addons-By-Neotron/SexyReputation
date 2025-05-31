@@ -244,13 +244,15 @@ mod.options = {
 					hasAlpha = false,
 					order = 8,
 				},
-				renown = {
-					type = "color",
-					name = string.format(RENOWN_LEVEL_LABEL, "1"),
-					hasAlpha = false,
-					order = 9,
-				},
 			},
 		},
 	}
 }
+if RENOWN_LEVEL_LABEL then
+	mod.options.args.factionColors.renown = {
+		type = "color",
+		name = string.format(RENOWN_LEVEL_LABEL, "1"),
+		hasAlpha = false,
+		order = 9,
+	}
+end
