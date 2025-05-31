@@ -246,7 +246,7 @@ mod.options = {
 				},
 				renown = {
 					type = "color",
-					name = RENOWN_LEVEL_LABEL,
+					name = string.format(RENOWN_LEVEL_LABEL, "1"),
 					hasAlpha = false,
 					order = 9,
 				},
