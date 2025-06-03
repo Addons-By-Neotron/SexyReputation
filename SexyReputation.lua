@@ -314,6 +314,7 @@ function mod:ScanFactions(toggleActiveId)
         end
     end
     del(foldedHeaders)
+
 end
 
 function mod:GetDate(delta)
@@ -588,6 +589,7 @@ function ldb.OnEnter(frame)
     local watchedFaction = mod.cdb.watchedFaction
     local gridLines = mod.gdb.gridLines
     local indent, isTopLevelHeader, isChildHeader, sessionChange, today, showRow
+    local paraIcon = [[|TInterface\Icons\Inv_legioncircle_paragoncache_argussianreach:25|t]]
     for id, faction in ipairs(mod.allFactions) do
         indent = 0
         isTopLevelHeader = faction.isHeader and not faction.isChild
@@ -637,7 +639,6 @@ function ldb.OnEnter(frame)
             if not faction.isHeader or faction.hasRep then
                 x = 3
                 local maxValue = faction.topValue-faction.bottomValue
-                local paraIcon = [[|TInterface\Icons\Inv_legioncircle_paragoncache_argussianreach:25|t]]
 
                 --Paragon adjustments
                 if faction.isParagon then
@@ -834,6 +835,23 @@ function mod:UpdateLDBText()
     end
 
     ldb.text = tconcat(fields, " - ")
+    local isParagon = C_Reputation and C_Reputation.IsFactionParagon and C_Reputation.IsFactionParagon
+    local hasParagonChest = false
+    if isParagon then
+        for idx = 1, 500 do
+            local factionId = select(14, GetFactionInfo(idx))
+            if factionId and isParagon(factionId) then
+                hasParagonChest = select(4, C_Reputation.GetFactionParagonInfo(factionId)) or hasParagonChest
+                if hasParagonChest then
+                    break
+                end
+            end
+        end
+    end
+    ldb.icon = (hasParagonChest and [[Interface\Icons\Inv_legioncircle_paragoncache_argussianreach]])
+            or ((UnitFactionGroup("player") == "Horde" and
+            [[Interface\Addons\SexyReputation\hordeicon]] or
+            [[Interface\Addons\SexyReputation\allianceicon]]));
 end
 
 -----------------------
@@ -893,12 +911,10 @@ do
                         gs.week  = gs.week + amount
                         gs.month = gs.month + amount
                     end
-                    if faction.id == mod.cdb.watchedFaction then
-                        mod:UpdateLDBText()
-                    end
                 end
             end
         end
+        mod:UpdateLDBText()
         deepDel(previousFactionData)
     end
 end
