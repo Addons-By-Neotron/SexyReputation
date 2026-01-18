@@ -706,11 +706,30 @@ function ldb.OnEnter(frame)
         -- calculate whether this row should be displayed. Split out this way
         -- so it's possible to understand what it's filtering and why
 
-        if skipUntilHeader and not isTopLevelHeader then
-            showRow = false
-        elseif skipUntilChildHeader and not (isTopLevelHeader or isChildHeader) then
-            showRow = false
-        elseif showOnlyChanged and not (sessionChange or today) then
+        if skipUntilHeader then
+            -- Skip children of the folded top-level header until we find:
+            -- 1. Another top-level header, OR
+            -- 2. A faction that's not a child (sibling at top level)
+            if not isTopLevelHeader and faction.isChild then
+                showRow = false
+            else
+                -- Found a sibling or next header, stop skipping
+                skipUntilHeader = nil
+            end
+        elseif skipUntilChildHeader then
+            -- Skip children of the folded child header until we find:
+            -- 1. A child header (sibling), OR
+            -- 2. A top-level header (went back up), OR
+            -- 3. A faction that's not a child (shouldn't happen in proper hierarchy)
+            if not (isTopLevelHeader or isChildHeader) and faction.isChild then
+                showRow = false
+            else
+                -- Found a sibling child header or went back to top level
+                skipUntilChildHeader = nil
+            end
+        end
+
+        if showOnlyChanged and not (sessionChange or today) then
             showRow = false
         elseif hideExalted and faction.standingId == 8 then
             showRow = faction.isParagon and showParagon
