@@ -4,6 +4,15 @@ local tooltip
 
 local GetNumFactions = GetNumFactions or C_Reputation.GetNumFactions
 local GetFactionInfo = GetFactionInfo
+local IsFactionInactive = IsFactionInactive or function (faction)
+    return not C_Reputation.IsFactionActive(faction)
+end
+local SetFactionInactive = SetFactionInactive or function(faction)
+    C_Reputation.SetFactionActive(faction, false)
+end
+local SetFactionActive = SetFactionActive or function(faction)
+    C_Reputation.SetFactionActive(faction, true)
+end
 
 -- 11.0 changed format, just use the old one for now.
 if not GetFactionInfo then
@@ -695,9 +704,13 @@ function ldb.OnEnter(frame)
     local indent, isTopLevelHeader, isChildHeader, sessionChange, today, showRow
     local paraIcon = [[|TInterface\Icons\Inv_legioncircle_paragoncache_argussianreach:25|t]]
     for id, faction in ipairs(mod.allFactions) do
-        indent = 0
         isTopLevelHeader = faction.isHeader and not faction.isChild
         isChildHeader = faction.isHeader and faction.isChild
+
+        -- Calculate indent early so we can use it in skip logic
+        indent = 0
+        if faction.isChild then indent = 20 end
+        if not faction.isHeader then indent = indent + 20 end
 
         sessionChange = mod.sessionFactionChanges[faction.id]
         today = mod.cdb.factionHistory[todaysDate] and mod.cdb.factionHistory[todaysDate][faction.id];
@@ -707,25 +720,26 @@ function ldb.OnEnter(frame)
         -- so it's possible to understand what it's filtering and why
 
         if skipUntilHeader then
-            -- Skip children of the folded top-level header until we find:
-            -- 1. Another top-level header, OR
-            -- 2. A faction that's not a child (sibling at top level)
-            if not isTopLevelHeader and faction.isChild then
-                showRow = false
-            else
-                -- Found a sibling or next header, stop skipping
+            -- Skip everything until we find another top-level header
+            if isTopLevelHeader then
+                -- Found next top-level header, stop skipping and show it
                 skipUntilHeader = nil
+                -- showRow remains true, display this faction
+            else
+                -- Still inside the folded top-level header, hide this row
+                showRow = false
             end
         elseif skipUntilChildHeader then
-            -- Skip children of the folded child header until we find:
-            -- 1. A child header (sibling), OR
-            -- 2. A top-level header (went back up), OR
-            -- 3. A faction that's not a child (shouldn't happen in proper hierarchy)
-            if not (isTopLevelHeader or isChildHeader) and faction.isChild then
-                showRow = false
-            else
-                -- Found a sibling child header or went back to top level
+            -- Skip factions at deeper indentation (indent=40) until we find:
+            -- 1. Another header (sibling child header or top-level)
+            -- 2. A faction at same or shallower indentation (indent <= 20)
+            if isTopLevelHeader or isChildHeader or indent <= 20 then
+                -- Found sibling or went back up, stop skipping and show it
                 skipUntilChildHeader = nil
+                -- showRow remains true, display this faction
+            else
+                -- Still inside the folded child header (indent=40), hide this row
+                showRow = false
             end
         end
 
@@ -737,8 +751,6 @@ function ldb.OnEnter(frame)
         if showRow then
             local title, folded
             if not showOnlyChanged then
-                if faction.isChild then indent = 20 end
-                if not faction.isHeader then indent = indent + 20 end
                 folded = faction.isHeader and mod.cdb.hf[faction.id]
                 local pm = _plusminus(folded)
                 title = faction.isHeader and fmt("%s %s", pm, faction.name) or c(faction.name, "ffd200")
@@ -759,7 +771,11 @@ function ldb.OnEnter(frame)
             tooltip:SetLineScript(y, "OnEnter", _showFactionInfoTooltip, faction)
             tooltip:SetLineScript(y, "OnLeave", nil)
 
-            if not faction.isHeader or faction.hasRep then
+            -- Headers without reputation need empty cells to maintain proper row height
+            if faction.isHeader and not faction.hasRep then
+                -- Add empty cell spanning remaining columns to give the row proper height
+                tooltip:SetCell(y, 3, " ", "LEFT", numCols - 2)
+            elseif not faction.isHeader or faction.hasRep then
                 x = 3
                 local maxValue = faction.topValue-faction.bottomValue
 
@@ -852,9 +868,6 @@ function ldb.OnEnter(frame)
                     skipUntilChildHeader = nil
                     skipUntilHeader = true
                 end
-            else
-                skipUntilChildHeader = nil
-                skipUntilHeader = nil
             end
         end
     end
