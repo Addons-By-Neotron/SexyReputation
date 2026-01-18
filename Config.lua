@@ -54,6 +54,7 @@ mod.defaults = {
 	},
 	global = {
 		factionLookup = {},
+		factionIdMigrationComplete = false, -- flag to track if migration has run
 		colorFactions = true,
 		showStanding = false,
 		showRep = false,

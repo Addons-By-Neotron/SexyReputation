@@ -179,6 +179,10 @@ end
 function mod:OnEnable()
     mod:RegisterEvent("COMBAT_TEXT_UPDATE")
     mod:RegisterEvent("QUEST_TURNED_IN")
+
+    -- Run migration once on first load after update
+    mod:ScheduleTimer("MigrateFactionData", 2)
+
     mod:ScheduleTimer("UpdateLDBText", 3)
     mod:ScheduleTimer("ScanFactions", 5)
 end
@@ -188,9 +192,16 @@ function mod:OnDisable()
 end
 
 -- This transforms the faction name to an ID which is cached.
--- This means the data storage will be smaller. The faction
--- ID is unique to a computer and cannot be shared with others.
-function mod:FactionID(name)
+-- When wowFactionId is provided, it uses WoW's native faction ID directly.
+-- This prevents issues with duplicate faction names in different trees.
+-- The old name-based lookup is kept for backward compatibility during migration.
+function mod:FactionID(name, wowFactionId)
+    -- If WoW's native faction ID is provided, use it directly
+    if wowFactionId then
+        return wowFactionId
+    end
+
+    -- Backward compatibility: name-based lookup (used during migration)
     if type(name) == "number" then return name end
     local id = FL[name]
     if not id then
@@ -199,6 +210,99 @@ function mod:FactionID(name)
         FL[name] = id
     end
     return id
+end
+
+-- Migrates faction data from old name-based IDs to new native WoW faction IDs
+-- This runs once on first load after the update
+function mod:MigrateFactionData()
+    -- Check if migration has already been completed
+    if mod.gdb.factionIdMigrationComplete then
+        return
+    end
+
+    local oldToNewMapping = {}
+    local migrationInfo = {
+        timestamp = date("%Y-%m-%d %H:%M:%S"),
+        mappingCount = 0,
+        historyDates = 0,
+        factionsMigrated = {},
+    }
+
+    -- Scan current factions to build mapping
+    for idx = 1, 500 do
+        local name, _, _, _, _, _, _, _, _, _, _, _, _, factionId = GetFactionInfo(idx)
+        if not name then break end
+
+        if factionId then
+            -- Get the old custom ID for this faction name
+            local oldId = FL[name]
+            if oldId and oldId ~= factionId then
+                oldToNewMapping[oldId] = factionId
+                migrationInfo.mappingCount = migrationInfo.mappingCount + 1
+                migrationInfo.factionsMigrated[name] = {
+                    oldId = oldId,
+                    newId = factionId,
+                }
+            end
+        end
+    end
+
+    -- Migrate data if we have mappings
+    if migrationInfo.mappingCount > 0 then
+        -- Migrate faction history
+        if mod.cdb.factionHistory then
+            local newHistory = {}
+            for date, factionData in pairs(mod.cdb.factionHistory) do
+                newHistory[date] = {}
+                migrationInfo.historyDates = migrationInfo.historyDates + 1
+                for oldFactionId, amount in pairs(factionData) do
+                    local newFactionId = oldToNewMapping[oldFactionId] or oldFactionId
+                    newHistory[date][newFactionId] = (newHistory[date][newFactionId] or 0) + amount
+                end
+            end
+            mod.cdb.factionHistory = newHistory
+        end
+
+        -- Migrate header fold states
+        if mod.cdb.hf then
+            local newHf = {}
+            for oldFactionId, folded in pairs(mod.cdb.hf) do
+                local newFactionId = oldToNewMapping[oldFactionId] or oldFactionId
+                newHf[newFactionId] = folded
+            end
+            mod.cdb.hf = newHf
+        end
+
+        -- Migrate watched faction
+        if mod.cdb.watchedFaction then
+            mod.cdb.watchedFaction = oldToNewMapping[mod.cdb.watchedFaction] or mod.cdb.watchedFaction
+        end
+    end
+
+    -- Special case: Clear data for faction 169 (Steamwheedle Cartel header)
+    -- This faction should not have reputation data
+    if mod.cdb.factionHistory then
+        for date, factionData in pairs(mod.cdb.factionHistory) do
+            factionData[169] = nil
+        end
+    end
+    if mod.cdb.hf then
+        mod.cdb.hf[169] = nil
+    end
+    if mod.cdb.watchedFaction == 169 then
+        mod.cdb.watchedFaction = nil
+    end
+
+    -- Mark migration as complete
+    mod.gdb.factionIdMigrationComplete = true
+
+    -- Print info message
+    if migrationInfo.mappingCount > 0 then
+        print(fmt("SexyReputation: Migration complete - migrated %d factions across %d history dates to native WoW faction IDs",
+                  migrationInfo.mappingCount, migrationInfo.historyDates))
+    else
+        print("SexyReputation: Migration complete - no faction ID changes needed")
+    end
 end
 
 function mod:ScanFactions(toggleActiveId)
@@ -281,7 +385,7 @@ function mod:ScanFactions(toggleActiveId)
                 "friendshipText", friendshipText,
                 "friendTextLevel", friendTextLevel,
                 "friendIsCapped", isCapped,
-                "id", mod:FactionID(name))
+                "id", mod:FactionID(name, factionId))
         mod.allFactions[idx] = faction
         mod.factionIdToIdx[faction.id] = idx
 
