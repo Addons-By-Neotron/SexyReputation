@@ -715,6 +715,13 @@ function ldb.OnEnter(frame)
     local gridLines = mod.gdb.gridLines
     local indent, isTopLevelHeader, isChildHeader, sessionChange, today, showRow
     local paraIcon = [[|TInterface\Icons\Inv_legioncircle_paragoncache_argussianreach:25|t]]
+
+    -- Track empty headers to add placeholder rows
+    local lastHeaderFaction = nil
+    local lastHeaderIndent = 0
+    local lastHeaderFolded = false
+    local childrenShownForLastHeader = false
+
     for id, faction in ipairs(mod.allFactions) do
         isTopLevelHeader = faction.isHeader and not faction.isChild
         isChildHeader = faction.isHeader and faction.isChild
@@ -761,6 +768,14 @@ function ldb.OnEnter(frame)
             showRow = faction.isParagon and showParagon
         end
         if showRow then
+            -- Check if we need to add placeholder for previous empty header (only if not folded)
+            if lastHeaderFaction and not childrenShownForLastHeader and not lastHeaderFolded and faction.isHeader then
+                y = _addIndentedCell(tooltip, "", c(L["(No visible factions)"], "808080"), lastHeaderIndent + 20, nil, nil, nil)
+                if gridLines then
+                    tooltip:AddSeparator(0.5, 1, 1, 1, 0.5)
+                end
+            end
+
             local title, folded
             if not showOnlyChanged then
                 -- Use composite key: factionID_name to handle duplicate faction IDs (like "Inactive")
@@ -784,6 +799,16 @@ function ldb.OnEnter(frame)
 
             tooltip:SetLineScript(y, "OnEnter", _showFactionInfoTooltip, faction)
             tooltip:SetLineScript(y, "OnLeave", nil)
+
+            -- Track headers and their children for empty header detection
+            if faction.isHeader then
+                lastHeaderFaction = faction
+                lastHeaderIndent = indent
+                lastHeaderFolded = folded or false
+                childrenShownForLastHeader = false
+            else
+                childrenShownForLastHeader = true
+            end
 
             -- Headers without reputation need empty cells to maintain proper row height
             if faction.isHeader and not faction.hasRep then
@@ -883,6 +908,14 @@ function ldb.OnEnter(frame)
                     skipUntilHeader = true
                 end
             end
+        end
+    end
+
+    -- Check if last header needs placeholder (only if not folded)
+    if lastHeaderFaction and not childrenShownForLastHeader and not lastHeaderFolded then
+        y = _addIndentedCell(tooltip, "", c(L["(No visible factions)"], "808080"), lastHeaderIndent + 20, nil, nil, nil)
+        if gridLines then
+            tooltip:AddSeparator(0.5, 1, 1, 1, 0.5)
         end
     end
 
