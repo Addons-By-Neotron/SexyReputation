@@ -769,7 +769,8 @@ function ldb.OnEnter(frame)
         end
         if showRow then
             -- Check if we need to add placeholder for previous empty header (only if not folded)
-            if lastHeaderFaction and not childrenShownForLastHeader and not lastHeaderFolded and faction.isHeader then
+            -- Only show placeholder when encountering a sibling or parent-level header, not child headers
+            if lastHeaderFaction and not childrenShownForLastHeader and not lastHeaderFolded and faction.isHeader and indent <= lastHeaderIndent then
                 y = _addIndentedCell(tooltip, "", c(L["(No visible factions)"], "808080"), lastHeaderIndent + 20, nil, nil, nil)
                 if gridLines then
                     tooltip:AddSeparator(0.5, 1, 1, 1, 0.5)
