@@ -230,6 +230,7 @@ function mod:MigrateFactionData()
     end
 
     local oldToNewMapping = {}
+    local factionIdToName = {}  -- Map faction ID to name for composite key
     local migrationInfo = {
         timestamp = date("%Y-%m-%d %H:%M:%S"),
         mappingCount = 0,
@@ -243,6 +244,9 @@ function mod:MigrateFactionData()
         if not name then break end
 
         if factionId then
+            -- Store faction ID to name mapping for composite keys
+            factionIdToName[factionId] = name
+
             -- Get the old custom ID for this faction name
             local oldId = FL[name]
             if oldId and oldId ~= factionId then
@@ -272,12 +276,18 @@ function mod:MigrateFactionData()
             mod.cdb.factionHistory = newHistory
         end
 
-        -- Migrate header fold states
+        -- Migrate header fold states to composite key format (factionID_name)
         if mod.cdb.hf then
             local newHf = {}
             for oldFactionId, folded in pairs(mod.cdb.hf) do
                 local newFactionId = oldToNewMapping[oldFactionId] or oldFactionId
-                newHf[newFactionId] = folded
+                local factionName = factionIdToName[newFactionId]
+
+                if factionName then
+                    -- Create composite key: factionID_name
+                    local compositeKey = newFactionId .. "_" .. factionName
+                    newHf[compositeKey] = folded
+                end
             end
             mod.cdb.hf = newHf
         end
@@ -631,7 +641,9 @@ local function _factionOnClick(frame, faction, button)
         elseif IsControlKeyDown() and IsShiftKeyDown() then
             mod:ScanFactions(faction.id)
         elseif faction.isHeader then
-            mod.cdb.hf[faction.id] = not mod.cdb.hf[faction.id] or nil
+            -- Use composite key: factionID_name to handle duplicate faction IDs
+            local foldKey = faction.id .. "_" .. faction.name
+            mod.cdb.hf[foldKey] = not mod.cdb.hf[foldKey] or nil
         end
     end
     ldb.OnEnter() -- redraw
@@ -751,7 +763,9 @@ function ldb.OnEnter(frame)
         if showRow then
             local title, folded
             if not showOnlyChanged then
-                folded = faction.isHeader and mod.cdb.hf[faction.id]
+                -- Use composite key: factionID_name to handle duplicate faction IDs (like "Inactive")
+                local foldKey = faction.id .. "_" .. faction.name
+                folded = faction.isHeader and mod.cdb.hf[foldKey]
                 local pm = _plusminus(folded)
                 title = faction.isHeader and fmt("%s %s", pm, faction.name) or c(faction.name, "ffd200")
             else
