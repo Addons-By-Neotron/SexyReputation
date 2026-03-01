@@ -53,6 +53,9 @@ local IsControlKeyDown = IsControlKeyDown
 local IsShiftKeyDown = IsShiftKeyDown
 local tconcat = table.concat
 local IsMajorFaction = C_Reputation and C_Reputation.IsMajorFaction
+-- 12.0: IsFactionParagon now means "faction supports paragon", not "player is at paragon".
+-- Use IsFactionParagonForCurrentPlayer (12.0+) with fallback to IsFactionParagon (pre-12.0).
+local IsPlayerParagon = C_Reputation and (C_Reputation.IsFactionParagonForCurrentPlayer or C_Reputation.IsFactionParagon)
 local GetFriendshipReputation = GetFriendshipReputation
 if not GetFriendshipReputation then
     local CGossipRep = C_GossipInfo and C_GossipInfo.GetFriendshipReputation
@@ -345,7 +348,7 @@ function mod:ScanFactions(toggleActiveId)
 
         if factionId then
             --check if paragon and grab info
-            isParagon = C_Reputation and C_Reputation.IsFactionParagon and C_Reputation.IsFactionParagon(factionId)
+            isParagon = IsPlayerParagon and IsPlayerParagon(factionId)
 
             if isParagon then
                 paraVal, paraThreshold, _, paraRewardPending, _ = C_Reputation.GetFactionParagonInfo(factionId)
@@ -355,7 +358,7 @@ function mod:ScanFactions(toggleActiveId)
             if isRenown then
                 local majorFactionData = C_MajorFactions.GetMajorFactionData(factionId)
                 renownLevel = majorFactionData.renownLevel
-                maxRenownLevels = #C_MajorFactions.GetRenownLevels(2507)
+                maxRenownLevels = majorFactionData.maxLevel or #C_MajorFactions.GetRenownLevels(factionId)
                 renownTitle = fmt(RENOWN_LEVEL_LABEL, renownLevel)
                 bottomValue = majorFactionData.renownLevelThreshold*(renownLevel-1)
                 topValue = bottomValue + majorFactionData.renownLevelThreshold
@@ -556,15 +559,19 @@ local function _showFactionInfoTooltip(frame, faction)
             end
             tooltip:AddHeader(c(header, "ffd200"))
             if faction.desc and faction.desc ~= '' then
-                tooltip:SetCell((tooltip:AddLine()), 1, faction.desc, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
+                tooltip:SetCell((tooltip:AddLine()), 1, faction.desc, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 300)
                 tooltip:AddLine(" ")
             end
             if faction.friendshipText and faction.friendshipText ~= '' then
-                tooltip:SetCell((tooltip:AddLine()), 1, faction.friendshipText, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
+                tooltip:SetCell((tooltip:AddLine()), 1, faction.friendshipText, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 300)
                 tooltip:AddLine(" ")
             end
             if faction.isRenown then
-                tooltip:SetCell((tooltip:AddLine()), 1, faction.renownTitle, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
+                local renownText = faction.renownTitle
+                if faction.maxRenownLevels and faction.renownLevel < faction.maxRenownLevels then
+                    renownText = fmt("%s / %d", renownText, faction.maxRenownLevels)
+                end
+                tooltip:SetCell((tooltip:AddLine()), 1, renownText, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
                 tooltip:AddLine(" ")
             end
             if faction.hasRep then
@@ -583,9 +590,6 @@ local function _showFactionInfoTooltip(frame, faction)
 
                     local color, rep, repTitle = mod:ReputationLevelDetails(faction)
                     if not faction.friendId then
-                        if isRenown then
-                            print(faction.name, faction.topValue, faction.bottomValue, faction.maxRenownLevels, rep)
-                        end
                         local remaining =
                             (faction.isParagon and (faction.paraThresh - faction.paraVal % faction.paraThresh))
                             or (faction.isRenown and ((faction.topValue - faction.bottomValue)* (faction.maxRenownLevels-1) - faction.reputation))
@@ -1019,7 +1023,7 @@ function mod:UpdateLDBText()
     end
 
     ldb.text = tconcat(fields, " - ")
-    local isParagon = C_Reputation and C_Reputation.IsFactionParagon and C_Reputation.IsFactionParagon
+    local isParagon = IsPlayerParagon
     local hasParagonChest = false
     if isParagon then
         for idx = 1, 500 do
