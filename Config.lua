@@ -55,6 +55,11 @@ mod.defaults = {
 	global = {
 		factionLookup = {},
 		factionIdMigrationComplete = false, -- flag to track if migration has run
+		warboundGainsMigrationComplete = false,
+		globalFactionHistory = {},
+		charRepData = {},
+		showCrossCharRep = true,
+		crossCharMax = 5,
 		colorFactions = true,
 		showStanding = false,
 		showRep = false,
@@ -244,6 +249,37 @@ mod.options = {
 					name = mod.repTitles[8],
 					hasAlpha = false,
 					order = 8,
+				},
+			},
+		},
+		crossChar = {
+			type = "group",
+			name = L["Cross-Character"],
+			desc = L["Show other characters' standings when hovering a faction."],
+			order = 10,
+			args = {
+				showCrossCharRep = {
+					type = "toggle",
+					name = L["Show Other Characters"],
+					desc = L["Show other characters' standings when hovering a faction."],
+					order = 1,
+				},
+				crossCharMax = {
+					type = "range",
+					name = L["Max Characters"],
+					desc = L["Maximum number of characters to display per faction."],
+					min = 1, max = 20, step = 1,
+					order = 2,
+				},
+				clearData = {
+					type = "execute",
+					name = L["Clear Character Data"],
+					desc = L["Remove all stored cross-character reputation data."],
+					order = 3,
+					func = function()
+						wipe(mod.gdb.charRepData)
+						print("SexyReputation: Cross-character data cleared.")
+					end,
 				},
 			},
 		},

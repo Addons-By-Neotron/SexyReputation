@@ -69,3 +69,11 @@ L["When enabled, Paragon factions will be shown when Exalted factions are hidden
 L["Paragon"] = true
 L["(No visible factions)"] = true
 L["Warbound"] = true
+L["Other Characters"] = true
+L["Cross-Character"] = true
+L["Show Other Characters"] = true
+L["Show other characters' standings when hovering a faction."] = true
+L["Max Characters"] = true
+L["Maximum number of characters to display per faction."] = true
+L["Clear Character Data"] = true
+L["Remove all stored cross-character reputation data."] = true

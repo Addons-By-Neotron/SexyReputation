@@ -203,8 +203,8 @@ function mod:OnEnable()
     mod:RegisterEvent("COMBAT_TEXT_UPDATE")
     mod:RegisterEvent("QUEST_TURNED_IN")
 
-    -- Run migration once on first load after update
-    mod:ScheduleTimer("MigrateFactionData", 2)
+    -- Run migrations once on first load after update
+    mod:ScheduleTimer("RunMigrations", 2)
 
     mod:ScheduleTimer("UpdateLDBText", 3)
     mod:ScheduleTimer("ScanFactions", 5)
@@ -233,6 +233,11 @@ function mod:FactionID(name, wowFactionId)
         FL[name] = id
     end
     return id
+end
+
+function mod:RunMigrations()
+    mod:MigrateFactionData()
+    mod:MigrateWarboundGains()
 end
 
 -- Migrates faction data from old name-based IDs to new native WoW faction IDs
@@ -335,6 +340,53 @@ function mod:MigrateFactionData()
                   migrationInfo.mappingCount, migrationInfo.historyDates))
     else
         print("SexyReputation: Migration complete - no faction ID changes needed")
+    end
+end
+
+function mod:MigrateWarboundGains()
+    if mod.gdb.warboundGainsMigrationComplete then return end
+
+    -- Build set of warbound faction IDs from current scan
+    local warboundIds = {}
+    for idx = 1, 500 do
+        local name, _, _, _, _, _, _, _, _, _, _, _, _, factionId = GetFactionInfo(idx)
+        if not name then break end
+        if factionId then
+            local factionData = C_Reputation.GetFactionDataByID(factionId)
+            if factionData and factionData.isAccountWide then
+                warboundIds[factionId] = true
+            end
+        end
+    end
+
+    local migratedCount = 0
+    -- Iterate all character profiles in AceDB's raw storage
+    local sv = mod.db.sv and mod.db.sv.char
+    if sv then
+        for charKey, charData in pairs(sv) do
+            local fh = charData.factionHistory
+            if fh then
+                for date, dayData in pairs(fh) do
+                    for factionId, amount in pairs(dayData) do
+                        if warboundIds[factionId] then
+                            -- Move to global history
+                            if not mod.gdb.globalFactionHistory[date] then
+                                mod.gdb.globalFactionHistory[date] = {}
+                            end
+                            mod.gdb.globalFactionHistory[date][factionId] =
+                                (mod.gdb.globalFactionHistory[date][factionId] or 0) + amount
+                            dayData[factionId] = nil
+                            migratedCount = migratedCount + 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    mod.gdb.warboundGainsMigrationComplete = true
+    if migratedCount > 0 then
+        print(fmt("SexyReputation: Migrated %d warbound faction gain entries to global history.", migratedCount))
     end
 end
 
@@ -460,6 +512,108 @@ function mod:ScanFactions(toggleActiveId)
     end
     del(foldedHeaders)
 
+    -- Snapshot current character's rep data for cross-character tracking
+    mod:SnapshotCharRepData()
+end
+
+function mod:SnapshotCharRepData()
+    local charKey = mod.db.keys.char
+    local _, className = UnitClass("player")
+    local charEntry = mod.gdb.charRepData[charKey]
+    if not charEntry then
+        charEntry = { className = className, factions = {} }
+        mod.gdb.charRepData[charKey] = charEntry
+    else
+        charEntry.className = className
+    end
+    local factions = charEntry.factions
+    wipe(factions)
+    for _, faction in ipairs(mod.allFactions) do
+        if not faction.isHeader and not faction.isAccountWide and faction.hasRep and faction.id then
+            factions[faction.id] = {
+                standingId = faction.standingId,
+                reputation = faction.reputation,
+                bottomValue = faction.bottomValue,
+                topValue = faction.topValue,
+                isParagon = faction.isParagon or nil,
+                paraVal = faction.paraVal,
+                paraThresh = faction.paraThresh,
+                friendId = faction.friendId,
+                friendTextLevel = faction.friendTextLevel,
+                isRenown = faction.isRenown or nil,
+                renownLevel = faction.renownLevel,
+                renownTitle = faction.renownTitle,
+                maxRenownLevels = faction.maxRenownLevels,
+            }
+        end
+    end
+end
+
+function mod:GetCrossCharRepForFaction(factionId)
+    local results = {}
+    local currentChar = mod.db.keys.char
+    local currentRealm = GetRealmName()
+    for charKey, charEntry in pairs(mod.gdb.charRepData) do
+        local fData = charEntry.factions[factionId]
+        if fData then
+            local displayName = charKey
+            -- Strip realm if same realm
+            local name, realm = charKey:match("^(.+) %- (.+)$")
+            if realm and realm == currentRealm then
+                displayName = name
+            end
+            local classColor = RAID_CLASS_COLORS[charEntry.className]
+            local colorHex = classColor and classColor.colorStr or "ffffffff"
+            -- Determine standing text and color
+            local title, colorId
+            if fData.isRenown then
+                title = fData.renownTitle or (RENOWN_LEVEL_LABEL and fmt(RENOWN_LEVEL_LABEL, fData.renownLevel or "?")) or "Renown"
+                colorId = mod.colorIds.renown
+            elseif fData.friendId then
+                title = fData.friendTextLevel or ""
+                colorId = mod.colorIds.friendly
+            else
+                title = mod.repTitles[fData.standingId] or ""
+                colorId = fData.standingId or 4
+            end
+            local sc = mod.gdb.colors[colorId]
+            local standingColor = sc and fmt("%02x%02x%02x", floor(sc.r*255), floor(sc.g*255), floor(sc.b*255)) or "ffffff"
+            local rep = fData.reputation - fData.bottomValue
+            local maxRep = fData.topValue - fData.bottomValue
+            local repText
+            if maxRep > 0 then
+                repText = fmt("%s %d/%d", title, rep, maxRep)
+            else
+                repText = title
+            end
+            table.insert(results, {
+                name = displayName,
+                colorHex = colorHex,
+                repText = repText,
+                standingColor = standingColor,
+                sortValue = fData.reputation + (fData.isParagon and (fData.paraVal or 0) or 0),
+                isCurrent = charKey == currentChar,
+            })
+        end
+    end
+    table.sort(results, function(a, b) return a.sortValue > b.sortValue end)
+    local maxChars = mod.gdb.crossCharMax or 5
+    if #results > maxChars then
+        -- Preserve the current character even if outside top N
+        local currentEntry
+        for i = maxChars + 1, #results do
+            if results[i].isCurrent then
+                currentEntry = results[i]
+            end
+        end
+        for i = #results, maxChars + 1, -1 do
+            results[i] = nil
+        end
+        if currentEntry then
+            results[maxChars + 1] = currentEntry
+        end
+    end
+    return results
 end
 
 function mod:GetDate(delta)
@@ -505,7 +659,11 @@ function mod:GetGainsSummary(id)
         newlyCalculated = true
         local todayDate = mod:GetDate()
         local yesterdayDate = mod:GetDate(86400)
-        local fh = mod.cdb.factionHistory
+        -- Use global history for warbound factions, character history otherwise
+        local isWarbound = mod.factionIdToIdx and mod.factionIdToIdx[id]
+            and mod.allFactions[mod.factionIdToIdx[id]]
+            and mod.allFactions[mod.factionIdToIdx[id]].isAccountWide
+        local fh = isWarbound and mod.gdb.globalFactionHistory or mod.cdb.factionHistory
         local todayChange = fh[todayDate] and fh[todayDate][id] or 0
         local yesterdayChange = fh[yesterdayDate] and fh[yesterdayDate][id] or 0
         local weekChange = (todayChange or 0) + (yesterdayChange or 0)
@@ -635,6 +793,27 @@ local function _showFactionInfoTooltip(frame, faction)
                     tooltip:SetCell(y, 1, c(L["Recent reputation changes"], "ffd200"))
                     tooltip:AddSeparator(1)
                     y = tooltip:AddLine(L["No changes recorded in the last 30 days."])
+                end
+            end
+
+            -- Cross-character standings
+            if mod.gdb.showCrossCharRep and not faction.isAccountWide and faction.hasRep then
+                local crossChars = mod:GetCrossCharRepForFaction(faction.id)
+                if #crossChars > 0 then
+                    tooltip:AddLine(" ")
+                    y = tooltip:AddHeader()
+                    tooltip:SetCell(y, 1, c(L["Other Characters"], "ffd200"))
+                    tooltip:AddSeparator(1)
+                    for _, entry in ipairs(crossChars) do
+                        local nameText = fmt("|c%s%s|r", entry.colorHex, entry.name)
+                        if entry.isCurrent then
+                            nameText = "> " .. nameText
+                        end
+                        tooltip:AddLine(
+                            nameText,
+                            c(entry.repText, entry.standingColor)
+                        )
+                    end
                 end
             end
 
@@ -1098,8 +1277,11 @@ do
 
         local date = mod:GetDate()
 
-        local today =  mod.cdb.factionHistory[date] or new()
-        mod.cdb.factionHistory[date] = today
+        local charToday = mod.cdb.factionHistory[date] or new()
+        mod.cdb.factionHistory[date] = charToday
+
+        local globalToday = mod.gdb.globalFactionHistory[date] or {}
+        mod.gdb.globalFactionHistory[date] = globalToday
 
         for _,faction in ipairs(previousFactionData) do
             local idx = mod.factionIdToIdx[faction.id] -- required since faction orders might have changed
@@ -1112,7 +1294,13 @@ do
                     local paraAmount = newFaction.isParagon and (newFaction.paraVal - faction.paraVal) or 0
                     local amount = paraAmount + newFaction.reputation - faction.reputation
                     mod.sessionFactionChanges[faction.id] = (mod.sessionFactionChanges[faction.id] or 0) + amount
-                    today[faction.id] = (today[faction.id] or 0) + amount
+
+                    -- Route to appropriate history table
+                    if newFaction.isAccountWide then
+                        globalToday[faction.id] = (globalToday[faction.id] or 0) + amount
+                    else
+                        charToday[faction.id] = (charToday[faction.id] or 0) + amount
+                    end
 
                     -- Update the cached rep changes here, if needed.
                     local gs,upToDate = mod:GetGainsSummary(faction.id)
