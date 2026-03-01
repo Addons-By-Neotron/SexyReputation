@@ -356,8 +356,11 @@ function mod:ScanFactions(toggleActiveId)
 
         local isParagon, paraVal, paraThreshold, paraRewardPending
         local isRenown, renownTitle, renownLevel, maxRenownLevels
+        local isAccountWide
 
         if factionId then
+            local factionData = C_Reputation and C_Reputation.GetFactionDataByID and C_Reputation.GetFactionDataByID(factionId)
+            isAccountWide = factionData and factionData.isAccountWide
             --check if paragon and grab info
             isParagon = IsPlayerParagon and IsPlayerParagon(factionId)
 
@@ -422,6 +425,7 @@ function mod:ScanFactions(toggleActiveId)
                 "friendRank", friendRank,
                 "friendMaxRank", friendMaxRank,
                 "friendIsCapped", isCapped,
+                "isAccountWide", isAccountWide,
                 "id", mod:FactionID(name, factionId))
         mod.allFactions[idx] = faction
         mod.factionIdToIdx[faction.id] = idx
@@ -587,6 +591,10 @@ local function _showFactionInfoTooltip(frame, faction)
                     renownText = fmt("%s / %d", renownText, faction.maxRenownLevels)
                 end
                 tooltip:SetCell((tooltip:AddLine()), 1, renownText, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 50)
+                tooltip:AddLine(" ")
+            end
+            if faction.isAccountWide then
+                tooltip:AddLine(c(L["Warbound"], "00ccff"))
                 tooltip:AddLine(" ")
             end
             if faction.hasRep then

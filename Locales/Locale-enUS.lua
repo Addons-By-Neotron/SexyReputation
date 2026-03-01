@@ -68,3 +68,4 @@ L["Always show Paragon Factions"] = true
 L["When enabled, Paragon factions will be shown when Exalted factions are hidden."] = true
 L["Paragon"] = true
 L["(No visible factions)"] = true
+L["Warbound"] = true
