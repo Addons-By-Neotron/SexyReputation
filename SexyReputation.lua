@@ -78,6 +78,17 @@ if not GetFriendshipReputation then
     end
 end
 
+local GetFriendshipRanks = GetFriendshipReputationRanks
+if not GetFriendshipRanks then
+    local CGossipRanks = C_GossipInfo and C_GossipInfo.GetFriendshipReputationRanks
+    GetFriendshipRanks = function(factionId)
+        if not factionId or not CGossipRanks then return nil, nil end
+        local info = CGossipRanks(factionId)
+        if not info then return nil, nil end
+        return info.currentLevel, info.maxLevel
+    end
+end
+
 local ExpandFactionHeader = ExpandFactionHeader or C_Reputation.ExpandFactionHeader
 local FL
 
@@ -375,6 +386,7 @@ function mod:ScanFactions(toggleActiveId)
         if not name then  break end -- last one reached
         local friendId, friendRep, _, _, friendshipText, _, friendTextLevel, friendThresh, nextFriendThresh = GetFriendshipReputation(factionId)
         local isCapped
+        local friendRank, friendMaxRank
         if (friendId ~= nil) then
             if nextFriendThresh then
                 bottomValue = friendThresh
@@ -384,6 +396,7 @@ function mod:ScanFactions(toggleActiveId)
                 bottomValue, topValue, earnedValue = 0, 1, 1
                 isCapped = true
             end
+            friendRank, friendMaxRank = GetFriendshipRanks(factionId)
         end
 
         local faction = newHash("name", name,
@@ -406,6 +419,8 @@ function mod:ScanFactions(toggleActiveId)
                 "friendId", friendId,
                 "friendshipText", friendshipText,
                 "friendTextLevel", friendTextLevel,
+                "friendRank", friendRank,
+                "friendMaxRank", friendMaxRank,
                 "friendIsCapped", isCapped,
                 "id", mod:FactionID(name, factionId))
         mod.allFactions[idx] = faction
@@ -554,16 +569,16 @@ local function _showFactionInfoTooltip(frame, faction)
             tooltip:SetColumnLayout(faction.hasRep and 2 or 1, "LEFT", "RIGHT")
             tooltip:Clear()
             local header = faction.name
-            if faction.friendTextLevel then
-                header = header .. " - "..faction.friendTextLevel.." ("..faction.standingId.." / 8)"
+            if faction.friendRank and faction.friendMaxRank then
+                header = fmt("%s (%d / %d)", header, faction.friendRank, faction.friendMaxRank)
             end
             tooltip:AddHeader(c(header, "ffd200"))
             if faction.desc and faction.desc ~= '' then
-                tooltip:SetCell((tooltip:AddLine()), 1, faction.desc, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 300)
+                tooltip:SetCell((tooltip:AddLine()), 1, faction.desc, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 100)
                 tooltip:AddLine(" ")
             end
             if faction.friendshipText and faction.friendshipText ~= '' then
-                tooltip:SetCell((tooltip:AddLine()), 1, faction.friendshipText, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 300)
+                tooltip:SetCell((tooltip:AddLine()), 1, faction.friendshipText, tooltip:GetFont(), "LEFT", 1, nil, nil, 0, 300, 100)
                 tooltip:AddLine(" ")
             end
             if faction.isRenown then
@@ -622,6 +637,7 @@ local function _showFactionInfoTooltip(frame, faction)
             end
             tooltip:SetPoint("TOPLEFT", frame, "TOPRIGHT", 10, 0)
             tooltip:SetFrameLevel(frame:GetFrameLevel()+1)
+            tooltip:UpdateScrolling(UIParent:GetHeight())
             tooltip:SetClampedToScreen(true)
             tooltip:Show()
             tooltip:SetAutoHideDelay(0.25, frame)
