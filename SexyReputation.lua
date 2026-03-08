@@ -2,49 +2,7 @@ SexyReputation = LibStub("AceAddon-3.0"):NewAddon("Sexy Reputations", "AceEvent-
 local mod = SexyReputation
 local tooltip
 
-local GetNumFactions = GetNumFactions or C_Reputation.GetNumFactions
-local GetFactionInfo = GetFactionInfo
-local IsFactionInactive = IsFactionInactive or function (faction)
-    return not C_Reputation.IsFactionActive(faction)
-end
-local SetFactionInactive = SetFactionInactive or function(faction)
-    C_Reputation.SetFactionActive(faction, false)
-end
-local SetFactionActive = SetFactionActive or function(faction)
-    C_Reputation.SetFactionActive(faction, true)
-end
-
--- 11.0 changed format, just use the old one for now.
-if not GetFactionInfo then
-    GetFactionInfo = function(factionIndex)
-        if not factionIndex then
-            return nil
-        end
-
-        local factionData = C_Reputation.GetFactionDataByIndex(factionIndex)
-        if not factionData then
-            return nil
-        end
-
-        return
-            factionData.name,
-            factionData.description,
-            factionData.reaction,
-            factionData.currentReactionThreshold,
-            factionData.nextReactionThreshold,
-            factionData.currentStanding,
-            factionData.atWarWith,
-            factionData.canToggleAtWar,
-            factionData.isHeader,
-            factionData.isCollapsed,
-            factionData.isHeaderWithRep,
-            factionData.isWatched,
-            factionData.isChild,
-            factionData.factionID,
-            factionData.hasBonusRepGain,
-            factionData.canSetInactive
-    end
-end
+local RepCompat = LibStub("LibMagicUtil-1.0").Reputation
 
 local fmt = string.format
 local floor = math.floor
@@ -52,44 +10,6 @@ local IsAltKeyDown = IsAltKeyDown
 local IsControlKeyDown = IsControlKeyDown
 local IsShiftKeyDown = IsShiftKeyDown
 local tconcat = table.concat
-local IsMajorFaction = C_Reputation and C_Reputation.IsMajorFaction
--- 12.0: IsFactionParagon now means "faction supports paragon", not "player is at paragon".
--- Use IsFactionParagonForCurrentPlayer (12.0+) with fallback to IsFactionParagon (pre-12.0).
-local IsPlayerParagon = C_Reputation and (C_Reputation.IsFactionParagonForCurrentPlayer or C_Reputation.IsFactionParagon)
-local GetFriendshipReputation = GetFriendshipReputation
-if not GetFriendshipReputation then
-    local CGossipRep = C_GossipInfo and C_GossipInfo.GetFriendshipReputation
-    GetFriendshipReputation = function(factionId)
-        if not factionId or not CGossipRep then return nil end
-        local rep = CGossipRep(factionId)
-        if not rep or rep.friendshipFactionID == 0 then return nil end
-        return
-          rep.friendshipFactionID,
-          rep.standing,
-          rep.maxRep,
-          rep.name,
-          rep.text,
-          rep.texture,
-          rep.reaction,
-          rep.reactionThreshold,
-          rep.nextThreshold,
-          rep.reversedColor,
-          rep.overrideColor
-    end
-end
-
-local GetFriendshipRanks = GetFriendshipReputationRanks
-if not GetFriendshipRanks then
-    local CGossipRanks = C_GossipInfo and C_GossipInfo.GetFriendshipReputationRanks
-    GetFriendshipRanks = function(factionId)
-        if not factionId or not CGossipRanks then return nil, nil end
-        local info = CGossipRanks(factionId)
-        if not info then return nil, nil end
-        return info.currentLevel, info.maxLevel
-    end
-end
-
-local ExpandFactionHeader = ExpandFactionHeader or C_Reputation.ExpandFactionHeader
 local FL
 
 local L        = LibStub("AceLocale-3.0"):GetLocale("SexyReputation", false)
@@ -259,7 +179,9 @@ function mod:MigrateFactionData()
 
     -- Scan current factions to build mapping
     for idx = 1, 500 do
-        local name, _, _, _, _, _, _, _, _, _, _, _, _, factionId = GetFactionInfo(idx)
+        local factionData = RepCompat.GetFactionDataByIndex(idx)
+        local name = factionData and factionData.name
+        local factionId = factionData and factionData.factionID
         if not name then break end
 
         if factionId then
@@ -349,13 +271,11 @@ function mod:MigrateWarboundGains()
     -- Build set of warbound faction IDs from current scan
     local warboundIds = {}
     for idx = 1, 500 do
-        local name, _, _, _, _, _, _, _, _, _, _, _, _, factionId = GetFactionInfo(idx)
-        if not name then break end
-        if factionId then
-            local factionData = C_Reputation and C_Reputation.GetFactionDataByID and C_Reputation.GetFactionDataByID(factionId)
-            if factionData and factionData.isAccountWide then
-                warboundIds[factionId] = true
-            end
+        local factionData = RepCompat.GetFactionDataByIndex(idx)
+        if not factionData then break end
+        local factionId = factionData.factionID
+        if factionId and factionData.isAccountWide then
+            warboundIds[factionId] = true
         end
     end
 
@@ -399,28 +319,41 @@ function mod:ScanFactions(toggleActiveId)
 
     -- Iterate through the factions until we run out. We need to unfold
     -- any folded header, which changes the number of factions, so we just
-    -- keep iterating until GetFactionInfo return nil
+    -- keep iterating until GetFactionDataByIndex returns nil
     local fr = mod.cdb.fr
 
     for idx = 1, 500 do
-        local name, description, standingId, bottomValue, topValue, earnedValue, atWarWith ,
-        canToggleAtWar, isHeader, isCollapsed, hasRep, isWatched, isChild, factionId = GetFactionInfo(idx)
+        local factionData = RepCompat.GetFactionDataByIndex(idx)
+
+        local name = factionData and factionData.name
+        local description = factionData and factionData.description
+        local standingId = factionData and factionData.reaction
+        local bottomValue = factionData and factionData.currentReactionThreshold
+        local topValue = factionData and factionData.nextReactionThreshold
+        local earnedValue = factionData and factionData.currentStanding
+        local atWarWith = factionData and factionData.atWarWith
+        local canToggleAtWar = factionData and factionData.canToggleAtWar
+        local isHeader = factionData and factionData.isHeader
+        local isCollapsed = factionData and factionData.isCollapsed
+        local hasRep = factionData and factionData.isHeaderWithRep
+        local isWatched = factionData and factionData.isWatched
+        local isChild = factionData and factionData.isChild
+        local factionId = factionData and factionData.factionID
 
         local isParagon, paraVal, paraThreshold, paraRewardPending
         local isRenown, renownTitle, renownLevel, maxRenownLevels
         local isAccountWide
 
         if factionId then
-            local factionData = C_Reputation and C_Reputation.GetFactionDataByID and C_Reputation.GetFactionDataByID(factionId)
-            isAccountWide = factionData and factionData.isAccountWide
+            isAccountWide = factionData.isAccountWide
             --check if paragon and grab info
-            isParagon = IsPlayerParagon and IsPlayerParagon(factionId)
+            isParagon = RepCompat.IsFactionParagon(factionId)
 
             if isParagon then
-                paraVal, paraThreshold, _, paraRewardPending, _ = C_Reputation.GetFactionParagonInfo(factionId)
+                paraVal, paraThreshold, _, paraRewardPending, _ = RepCompat.GetFactionParagonInfo(factionId)
             end
 
-            isRenown = IsMajorFaction and IsMajorFaction(factionId)
+            isRenown = RepCompat.IsMajorFaction(factionId)
             if isRenown then
                 local majorFactionData = C_MajorFactions.GetMajorFactionData(factionId)
                 renownLevel = majorFactionData.renownLevel
@@ -435,23 +368,27 @@ function mod:ScanFactions(toggleActiveId)
             end
         end
 
-        local nextName = GetFactionInfo(idx + 1)
+        local nextFactionData = RepCompat.GetFactionDataByIndex(idx + 1)
+        local nextName = nextFactionData and nextFactionData.name
 
         if name == nextName and nextName ~= "Guild" then break end -- bugfix
         if not name then  break end -- last one reached
-        local friendId, friendRep, _, _, friendshipText, _, friendTextLevel, friendThresh, nextFriendThresh = GetFriendshipReputation(factionId)
+        local friendInfo = RepCompat.GetFriendshipReputation(factionId)
         local isCapped
         local friendRank, friendMaxRank
-        if (friendId ~= nil) then
-            if nextFriendThresh then
-                bottomValue = friendThresh
-                topValue = nextFriendThresh
-                earnedValue = friendRep
+        if friendInfo then
+            if friendInfo.nextThreshold then
+                bottomValue = friendInfo.reactionThreshold
+                topValue = friendInfo.nextThreshold
+                earnedValue = friendInfo.standing
             else
                 bottomValue, topValue, earnedValue = 0, 1, 1
                 isCapped = true
             end
-            friendRank, friendMaxRank = GetFriendshipRanks(factionId)
+            local rankInfo = RepCompat.GetFriendshipReputationRanks(factionId)
+            if rankInfo then
+                friendRank, friendMaxRank = rankInfo.currentLevel, rankInfo.maxLevel
+            end
         end
 
         local faction = newHash("name", name,
@@ -471,9 +408,9 @@ function mod:ScanFactions(toggleActiveId)
                 "renownLevel", renownLevel,
                 "maxRenownLevels", maxRenownLevels,
                 "isChild", isChild,
-                "friendId", friendId,
-                "friendshipText", friendshipText,
-                "friendTextLevel", friendTextLevel,
+                "friendId", friendInfo and friendInfo.friendshipFactionID,
+                "friendshipText", friendInfo and friendInfo.text,
+                "friendTextLevel", friendInfo and friendInfo.reaction,
                 "friendRank", friendRank,
                 "friendMaxRank", friendMaxRank,
                 "friendIsCapped", isCapped,
@@ -483,19 +420,15 @@ function mod:ScanFactions(toggleActiveId)
         mod.factionIdToIdx[faction.id] = idx
 
         if faction.id == toggleActiveId then
-            local isInActive = IsFactionInactive(idx)
-            if isInActive then
-                SetFactionActive(idx)
-            else
-                SetFactionInactive(idx)
-            end
+            local isActive = RepCompat.IsFactionActive(idx)
+            RepCompat.SetFactionActive(idx, not isActive)
             mod:ScanFactions() -- we need to rescan fully..
             return
         end
 
         if isHeader and isCollapsed then
             foldedHeaders[idx] = true
-            ExpandFactionHeader(idx)
+            RepCompat.ExpandFactionHeader(idx)
         end
         if fr and faction.name == FACTION_INACTIVE then
             mod.cdb.hf[faction.id] = true
@@ -506,8 +439,8 @@ function mod:ScanFactions(toggleActiveId)
 
     -- Restore factions folded states
     for id = #mod.allFactions, 1, -1 do
-        if foldedHeaders[idx] then
-            CollapseFactionHeader(idx)
+        if foldedHeaders[id] then
+            RepCompat.CollapseFactionHeader(id)
         end
     end
     del(foldedHeaders)
@@ -920,7 +853,7 @@ function ldb.OnEnter(frame)
     local watchedFaction = mod.cdb.watchedFaction
     local gridLines = mod.gdb.gridLines
     local indent, isTopLevelHeader, isChildHeader, sessionChange, today, showRow
-    local paraIcon = [[|TInterface\Icons\Inv_legioncircle_paragoncache_argussianreach:25|t]]
+    local paraIcon = [[|TInterface\Icons\Inv_legioncircle_paragoncache_argussianreach:16|t]]
 
     -- Track empty headers to add placeholder rows
     local lastHeaderFaction = nil
@@ -1000,7 +933,7 @@ function ldb.OnEnter(frame)
 
             local icon = ""
             if watchedFaction == faction.id then
-                icon = [[|TInterface\Icons\Spell_Shadow_EvilEye:20|t]]
+                icon = [[|TInterface\Icons\Spell_Shadow_EvilEye:16|t]]
             end
             y = _addIndentedCell(tooltip, icon, title, indent, font, _factionOnClick, faction)
 
@@ -1060,7 +993,7 @@ function ldb.OnEnter(frame)
                     if faction.paraRewardPending then
                         tooltip:SetCell(y, x, paraIcon, "CENTER")
                     else
-                        tooltip:SetCell(y, x, repTitle, "CENTER", mod.barProvider, barColor, rep, maxValue, 120, 12)
+                        tooltip:SetCell(y, x, repTitle, "CENTER", mod.barProvider, barColor, rep, maxValue, 120, 14)
                         local xx, yy = x, y
 
                         tooltip:SetLineScript(y, "OnEnter", function(frame, factionid)
@@ -1225,16 +1158,15 @@ function mod:UpdateLDBText()
     end
 
     ldb.text = tconcat(fields, " - ")
-    local isParagon = IsPlayerParagon
     local hasParagonChest = false
-    if isParagon then
-        for idx = 1, 500 do
-            local factionId = select(14, GetFactionInfo(idx))
-            if factionId and isParagon(factionId) then
-                hasParagonChest = select(4, C_Reputation.GetFactionParagonInfo(factionId)) or hasParagonChest
-                if hasParagonChest then
-                    break
-                end
+    for idx = 1, 500 do
+        local factionData = RepCompat.GetFactionDataByIndex(idx)
+        if not factionData then break end
+        local factionId = factionData.factionID
+        if factionId and RepCompat.IsFactionParagon(factionId) then
+            hasParagonChest = select(4, RepCompat.GetFactionParagonInfo(factionId)) or hasParagonChest
+            if hasParagonChest then
+                break
             end
         end
     end
