@@ -901,9 +901,9 @@ function ldb.OnEnter(frame)
             end
         end
 
-        if showOnlyChanged and not (sessionChange or today) then
+        if showRow and showOnlyChanged and not (sessionChange or today) then
             showRow = false
-        elseif hideExalted and faction.standingId == 8 then
+        elseif showRow and hideExalted and faction.standingId == 8 and not faction.isHeader then
             showRow = faction.isParagon and showParagon
         end
         if showRow then
