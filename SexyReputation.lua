@@ -627,8 +627,9 @@ end
 -- LDB Display and display utility methods
 
 local function _addIndentedCell(tooltip, icon, text, indentation, font, func, arg)
-    local y, x = tooltip:AddLine(icon)
-    tooltip:SetCell(y, 2, text, font or tooltip:GetFont(), "LEFT", 1, nil, indentation)
+    local y, x = tooltip:AddLine()
+    tooltip:SetCell(y, 2, icon)
+    tooltip:SetCell(y, 3, text, font or tooltip:GetFont(), "LEFT", 1, nil, indentation)
     if func then
         tooltip:SetLineScript(y, "OnMouseUp", func, arg)
     end
@@ -792,7 +793,7 @@ function ldb.OnEnter(frame)
     tooltip = QTIP:Acquire("SexyRepTooltip")
     tooltip:EnableMouse(true)
 
-    local numCols = 2
+    local numCols = 3
 
     local showRep = mod.gdb.repTextStyle ~= mod.TEXT_STYLE_STANDING and mod.gdb.repStyle == mod.STYLE_TEXT
     local showStanding = mod.gdb.repTextStyle ~= mod.TEXT_STYLE_REPUTATION and mod.gdb.repStyle == mod.STYLE_TEXT
@@ -823,8 +824,8 @@ function ldb.OnEnter(frame)
 
     local y, x
 
-    y = tooltip:AddHeader("", c(L["Faction"], "ffff00"))
-    x = 3
+    y = tooltip:AddHeader("", "", c(L["Faction"], "ffff00"))
+    x = 4
     if showRepBar then
         tooltip:SetCell(y, x, c(L["Standing"], "ffff00"), "CENTER") x = x + 1
     else
@@ -860,6 +861,31 @@ function ldb.OnEnter(frame)
     local lastHeaderIndent = 0
     local lastHeaderFolded = false
     local childrenShownForLastHeader = false
+
+    -- Pre-scan: build map of folded headers that contain paragon reward children
+    local headerParagonRewards = {}
+    do
+        local currentTopHeader, currentChildHeader
+        local topFolded, childFolded
+        for _, f in ipairs(mod.allFactions) do
+            local foldKey = f.id .. "_" .. f.name
+            if f.isHeader and not f.isChild then
+                currentTopHeader = foldKey
+                currentChildHeader = nil
+                topFolded = mod.cdb.hf[foldKey]
+                childFolded = false
+            elseif f.isHeader and f.isChild then
+                currentChildHeader = foldKey
+                childFolded = mod.cdb.hf[foldKey]
+            elseif f.isParagon and f.paraRewardPending then
+                if topFolded and currentTopHeader then
+                    headerParagonRewards[currentTopHeader] = true
+                elseif childFolded and currentChildHeader then
+                    headerParagonRewards[currentChildHeader] = true
+                end
+            end
+        end
+    end
 
     for id, faction in ipairs(mod.allFactions) do
         isTopLevelHeader = faction.isHeader and not faction.isChild
@@ -937,6 +963,16 @@ function ldb.OnEnter(frame)
             end
             y = _addIndentedCell(tooltip, icon, title, indent, font, _factionOnClick, faction)
 
+            -- Paragon icon in column 1
+            if faction.isParagon and faction.paraRewardPending then
+                tooltip:SetCell(y, 1, paraIcon)
+            elseif faction.isHeader then
+                local foldKey = faction.id .. "_" .. faction.name
+                if headerParagonRewards[foldKey] then
+                    tooltip:SetCell(y, 1, paraIcon)
+                end
+            end
+
             tooltip:SetLineScript(y, "OnEnter", _showFactionInfoTooltip, faction)
             tooltip:SetLineScript(y, "OnLeave", nil)
 
@@ -953,9 +989,9 @@ function ldb.OnEnter(frame)
             -- Headers without reputation need empty cells to maintain proper row height
             if faction.isHeader and not faction.hasRep then
                 -- Add empty cell spanning remaining columns to give the row proper height
-                tooltip:SetCell(y, 3, " ", "LEFT", numCols - 2)
+                tooltip:SetCell(y, 4, " ", "LEFT", numCols - 3)
             elseif not faction.isHeader or faction.hasRep then
-                x = 3
+                x = 4
                 local maxValue = faction.topValue-faction.bottomValue
 
                 --Paragon adjustments
@@ -976,7 +1012,7 @@ function ldb.OnEnter(frame)
                 -- "RIGHT", "CENTER", "RIGHT", "RIGHT")
                 if showStanding then
                     if faction.paraRewardPending then
-                        tooltip:SetCell(y, x, paraIcon, "CENTER")
+                        tooltip:SetCell(y, x, c(L["Reward Available"], "00ABF0"), "LEFT")
                     else
                         tooltip:SetCell(y, x, c(repTitle, color), "LEFT")
                     end
@@ -989,39 +1025,37 @@ function ldb.OnEnter(frame)
                     tooltip:SetCell(y, x, tostring(maxValue), "RIGHT") x = x + 1
                 end
                 if showRepBar then
-
-                    if faction.paraRewardPending then
-                        tooltip:SetCell(y, x, paraIcon, "CENTER")
-                    else
-                        tooltip:SetCell(y, x, repTitle, "CENTER", mod.barProvider, barColor, rep, maxValue, 120, 14)
-                        local xx, yy = x, y
-
-                        tooltip:SetLineScript(y, "OnEnter", function(frame, factionid)
-                            local idx = mod.factionIdToIdx[factionid]
-                            local faction
-                            if idx then
-                                local faction = mod.allFactions[idx]
-                                if faction then
-                                    tooltip:SetCell(yy, xx, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, barColor, rep, maxValue, 120, 12)
-
-                                    _showFactionInfoTooltip(frame, faction)
-                                end
-                            end
-                        end, faction.id)
-                        tooltip:SetLineScript(y, "OnLeave", function(frame, factionid)
-                            local idx = mod.factionIdToIdx[factionid]
-                            if idx then
-                                local faction = mod.allFactions[idx]
-                                if faction then
-                                    -- Breaks encapsulation but.. otherwise it breaks the code
-                                    local lines = tooltip.lines and tooltip.lines[yy]
-                                    if lines and lines.cells and lines.cells[xx] then
-                                        tooltip:SetCell(yy, xx, repTitle, "CENTER", mod.barProvider, barColor, rep, maxValue, 120, 12)
-                                    end
-                                end
-                            end
-                        end, faction.id)
+                    local barText = repTitle
+                    if faction.isParagon and faction.paraRewardPending then
+                        barText = fmt("%s %s", L["Paragon"], paraIcon)
                     end
+                    tooltip:SetCell(y, x, barText, "CENTER", mod.barProvider, barColor, rep, maxValue, 120, 14)
+                    local xx, yy = x, y
+
+                    tooltip:SetLineScript(y, "OnEnter", function(frame, factionid)
+                        local idx = mod.factionIdToIdx[factionid]
+                        local faction
+                        if idx then
+                            local faction = mod.allFactions[idx]
+                            if faction then
+                                tooltip:SetCell(yy, xx, fmt("%d / %d", rep, maxValue), "CENTER", mod.barProvider, barColor, rep, maxValue, 120, 12)
+
+                                _showFactionInfoTooltip(frame, faction)
+                            end
+                        end
+                    end, faction.id)
+                    tooltip:SetLineScript(y, "OnLeave", function(frame, factionid)
+                        local idx = mod.factionIdToIdx[factionid]
+                        if idx then
+                            local faction = mod.allFactions[idx]
+                            if faction then
+                                local lines = tooltip.lines and tooltip.lines[yy]
+                                if lines and lines.cells and lines.cells[xx] then
+                                    tooltip:SetCell(yy, xx, barText, "CENTER", mod.barProvider, barColor, rep, maxValue, 120, 12)
+                                end
+                            end
+                        end
+                    end, faction.id)
 
                     x = x + 1
                 end

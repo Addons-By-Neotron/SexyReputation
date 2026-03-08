@@ -26,6 +26,7 @@ L["Percentage"] = true
 L["Recent reputation changes"] = true
 L["Reputation"] = true
 L["Reputation Only"] = true
+L["Reward Available"] = true
 L["Session"] = true
 L["Sexy Reputation"] = true
 L["Sexy Reputations"] = true
