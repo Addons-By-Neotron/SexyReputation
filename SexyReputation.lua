@@ -352,7 +352,7 @@ function mod:MigrateWarboundGains()
         local name, _, _, _, _, _, _, _, _, _, _, _, _, factionId = GetFactionInfo(idx)
         if not name then break end
         if factionId then
-            local factionData = C_Reputation.GetFactionDataByID(factionId)
+            local factionData = C_Reputation and C_Reputation.GetFactionDataByID and C_Reputation.GetFactionDataByID(factionId)
             if factionData and factionData.isAccountWide then
                 warboundIds[factionId] = true
             end
