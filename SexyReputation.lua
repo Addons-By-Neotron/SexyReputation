@@ -87,7 +87,7 @@ do
     end
 
     function del(t)
-        if type(t) ~= table then
+        if type(t) ~= "table" then
             return nil
         end
         for k,v in pairs(t) do
